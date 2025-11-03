@@ -32,6 +32,11 @@ const Navigation = () => {
             <Link to="/contact" className="text-foreground hover:text-primary transition-colors font-medium">
               Contact
             </Link>
+            {isAuthenticated && user?.role === 'admin' && (
+              <Link to="/admin/payouts" className="text-foreground hover:text-primary transition-colors font-medium">
+                Payouts
+              </Link>
+            )}
             {isAuthenticated ? (
               <Button asChild variant="adventure" size="sm">
                 <Link to="/profile">
@@ -93,6 +98,15 @@ const Navigation = () => {
               >
                 Contact
               </Link>
+              {isAuthenticated && user?.role === 'admin' && (
+                <Link 
+                  to="/admin/payouts" 
+                  className="text-foreground hover:text-primary transition-colors font-medium"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Payouts
+                </Link>
+              )}
               {isAuthenticated ? (
                 <Button asChild variant="adventure" size="sm" className="w-full">
                   <Link to="/profile" onClick={() => setIsMenuOpen(false)}>

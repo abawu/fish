@@ -12,8 +12,10 @@ const MyBookings = () => {
   type Booking = {
     _id?: string;
     id?: string;
+    experience?: { title?: string } | string | null;
     tour?: { name?: string } | string | null;
-    price?: number;
+    price?: number; // total
+    quantity?: number;
     paid?: boolean;
     status?: string;
     createdAt?: string;
@@ -148,58 +150,60 @@ const MyBookings = () => {
               </div>
             ) : (
               <div className="grid gap-6">
-                {bookings.map(b => (
-                  <Card
-                    key={b._id || b.id}
-                    className="border-0 shadow-sm rounded-lg overflow-hidden"
-                  >
-                    <CardContent className="p-4 md:p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-foreground text-lg">
-                          {typeof b.tour === 'string'
-                            ? b.tour
-                            : b.tour?.name || 'Tour'}
-                        </h3>
+                {bookings.map(b => {
+                  const title = typeof b.experience === 'object'
+                    ? (b.experience?.title || 'Experience')
+                    : (typeof b.tour === 'object' ? b.tour?.name : (b.tour as string)) || 'Experience';
+                  const qty = b.quantity || 1;
+                  const total = b.price || 0;
+                  const per = qty > 0 ? Math.round((total / qty) * 100) / 100 : total;
+                  return (
+                    <Card
+                      key={b._id || b.id}
+                      className="border-0 shadow-sm rounded-lg overflow-hidden"
+                    >
+                      <CardContent className="p-4 md:p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-foreground text-lg">
+                            {title}
+                          </h3>
 
-                        <div className="mt-2 flex flex-col sm:flex-row sm:items-center sm:gap-4 text-sm text-muted-foreground">
-                          <span>
-                            Booked on:{' '}
-                            {b.createdAt
-                              ? new Date(b.createdAt).toLocaleString()
-                              : 'Unknown'}
-                          </span>
-                          <span className="mt-1 sm:mt-0">
-                            Price:{' '}
-                            <span className="font-medium text-foreground">
-                              ETB {b.price ?? '—'}
+                          <div className="mt-2 flex flex-col sm:flex-row sm:items-center sm:gap-4 text-sm text-muted-foreground">
+                            <span>
+                              Booked on{' '}
+                              {b.createdAt
+                                ? new Date(b.createdAt).toLocaleString()
+                                : 'Unknown'}
                             </span>
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-4 mt-3 md:mt-0">
-                        <div
-                          className="px-3 py-1 rounded-full text-sm font-medium"
-                          style={{
-                            backgroundColor: b.paid
-                              ? 'rgba(16,185,129,0.12)'
-                              : 'rgba(220,38,38,0.08)',
-                            color: b.paid ? '#10B981' : '#DC2626'
-                          }}
-                        >
-                          {b.paid ? 'Paid' : b.status || 'Pending'}
+                            <span className="mt-1 sm:mt-0">Guests: <span className="text-foreground font-medium">{qty}</span></span>
+                            <span className="mt-1 sm:mt-0">Per person: <span className="text-foreground font-medium">ETB {per}</span></span>
+                          </div>
                         </div>
 
-                        <div className="text-sm text-muted-foreground">
-                          <span className="block">Total</span>
-                          <span className="font-semibold text-foreground">
-                            ETB {b.price ?? '—'}
-                          </span>
+                        <div className="flex items-center gap-4 mt-3 md:mt-0">
+                          <div
+                            className="px-3 py-1 rounded-full text-sm font-medium"
+                            style={{
+                              backgroundColor: b.paid
+                                ? 'rgba(16,185,129,0.12)'
+                                : 'rgba(220,38,38,0.08)',
+                              color: b.paid ? '#10B981' : '#DC2626'
+                            }}
+                          >
+                            {b.paid ? 'Paid' : b.status || 'Pending'}
+                          </div>
+
+                          <div className="text-sm text-muted-foreground">
+                            <span className="block">Total</span>
+                            <span className="font-semibold text-foreground">
+                              ETB {total}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             )}
           </div>

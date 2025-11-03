@@ -26,6 +26,9 @@ import HostManagement from "./pages/HostManagement";
 import HostApplication from "./pages/HostApplication";
 import Contact from "./pages/Contact";
 import NotFound from "./pages/NotFound";
+import Wallet from "./pages/Wallet";
+import MyWithdrawals from "./pages/MyWithdrawals";
+import AdminPayouts from "./pages/AdminPayouts";
 
 const queryClient = new QueryClient();
 
@@ -62,6 +65,22 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <UpdatePassword />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/host/wallet"
+              element={
+                <ProtectedRoute>
+                  <Wallet />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/host/withdrawals"
+              element={
+                <ProtectedRoute>
+                  <MyWithdrawals />
                 </ProtectedRoute>
               }
             />
@@ -110,6 +129,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <HostManagement />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/payouts"
+              element={
+                <ProtectedRoute>
+                  <AdminPayouts />
                 </ProtectedRoute>
               }
             />

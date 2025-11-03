@@ -3,8 +3,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar, Users, Star } from "lucide-react";
 import { Link } from "react-router-dom";
-import { API_ORIGIN } from "@/lib/api";
+import { API_ORIGIN, bookingsAPI } from "@/lib/api";
 import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
 
 interface TourCardProps {
   tour: {
@@ -22,7 +23,20 @@ interface TourCardProps {
 }
 
 const TourCard = ({ tour }: TourCardProps) => {
-
+  const [available, setAvailable] = useState<number | null>(null);
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const resp = await bookingsAPI.getAvailability(String(tour._id ?? tour.id));
+        const data = resp.data || resp;
+        const a = data.data || data;
+        setAvailable(typeof a.available === 'number' ? a.available : null);
+      } catch {
+        setAvailable(null);
+      }
+    };
+    load();
+  }, [tour._id, tour.id]);
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -46,6 +60,15 @@ const TourCard = ({ tour }: TourCardProps) => {
             alt={tour.title}
             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
           />
+          {available !== null && (
+            <div className="absolute top-2 left-2 z-20">
+              {available < 1 ? (
+                <Badge variant="destructive">Sold out</Badge>
+              ) : (
+                <Badge variant="secondary">{available} left</Badge>
+              )}
+            </div>
+          )}
         </div>
 
         <CardContent className="p-6">
@@ -89,9 +112,15 @@ const TourCard = ({ tour }: TourCardProps) => {
                 ETB {tour.price}
               </p>
             </div>
-            <Button asChild variant="adventure" size="default">
-              <Link to={`/experiences/${tour._id ?? tour.id}`}>Join Experience</Link>
-            </Button>
+            {available !== null && available < 1 ? (
+              <Button variant="outline" size="default" disabled>
+                Sold out
+              </Button>
+            ) : (
+              <Button asChild variant="adventure" size="default">
+                <Link to={`/experiences/${tour._id ?? tour.id}`}>Join Experience</Link>
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>

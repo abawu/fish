@@ -194,6 +194,44 @@ export const hostApplicationAPI = {
   },
 };
 
+// ADD: Wallet & Withdrawals API
+export const walletAPI = {
+  getMy: async () => {
+    const response = await api.get("/wallet");
+    return response.data;
+  },
+};
+
+export const withdrawalsAPI = {
+  create: async (payload: { amountCents: number; clientRequestId?: string; destination?: any }) => {
+    const response = await api.post("/withdrawals", payload);
+    return response.data;
+  },
+  listMine: async (params?: { page?: number; limit?: number }) => {
+    const response = await api.get("/withdrawals", { params });
+    return response.data;
+  },
+};
+
+export const adminPayoutsAPI = {
+  createExport: async () => {
+    const response = await api.post("/admin/payouts/exports");
+    return response.data;
+  },
+  markPaid: async (id: string) => {
+    const response = await api.post(`/admin/payouts/withdrawals/${id}/mark-paid`);
+    return response.data;
+  },
+  markFailed: async (id: string, reason?: string) => {
+    const response = await api.post(`/admin/payouts/withdrawals/${id}/mark-failed`, { reason });
+    return response.data;
+  },
+  listWithdrawals: async (status?: string) => {
+    const response = await api.get("/admin/payouts/withdrawals", { params: status ? { status } : {} });
+    return response.data;
+  }
+};
+
 export const usersAPI = {
   getAll: async (filters?: { role?: string }) => {
     const params = new URLSearchParams();
@@ -361,10 +399,8 @@ export const bookingsAPI = {
     // Placeholder - would need backend booking endpoints
     throw new Error("Booking functionality not yet implemented in backend");
   },
-  create: async (experienceId: string) => {
-    // Calls backend to create a checkout session (Chapa)
-    // backend route: GET /api/v1/bookings/checkout-session/:experienceId
-    const response = await api.get(`/bookings/checkout-session/${experienceId}`);
+  create: async (experienceId: string, qty?: number) => {
+    const response = await api.get(`/bookings/checkout-session/${experienceId}`, { params: qty ? { qty } : {} });
     return response.data;
   },
   verify: async (txRef: string) => {
@@ -377,6 +413,10 @@ export const bookingsAPI = {
   },
   getHostBookings: async () => {
     const response = await api.get("/bookings/host/bookings");
+    return response.data;
+  },
+  getAvailability: async (experienceId: string) => {
+    const response = await api.get(`/bookings/availability/${experienceId}`);
     return response.data;
   },
 };

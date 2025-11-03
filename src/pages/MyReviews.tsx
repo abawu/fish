@@ -40,6 +40,13 @@ const MyReviews = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editReview, setEditReview] = useState("");
   const [editRating, setEditRating] = useState(0);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+  const [total, setTotal] = useState<number | null>(null);
+
+  const [search, setSearch] = useState("");
+  const [minRating, setMinRating] = useState<number | "">("");
+  const [maxRating, setMaxRating] = useState<number | "">("");
 
   const fetchReviews = useCallback(async () => {
     try {
@@ -47,7 +54,14 @@ const MyReviews = () => {
         setReviews([]);
         return;
       }
-      const response = await reviewsAPI.getAll();
+      // Admin: fetch all with filters. Non-admin: still fetch all, will filter to own.
+      const params: Record<string, any> = { page, limit, sort: '-createdAt' };
+      if (user?.role === 'admin') {
+        if (search) params.search = search; // backend may ignore; we filter client-side too
+        if (minRating !== "") params.minRating = minRating;
+        if (maxRating !== "") params.maxRating = maxRating;
+      }
+      const response = await reviewsAPI.getAll(params);
       // Normalize possible response shapes:
       // - { status, results, data: { data: [...] } }
       // - { data: [...] }
@@ -57,20 +71,13 @@ const MyReviews = () => {
         response?.data ?? // some helpers return { data: [...] }
         response ??
         [];
+      // capture total if provided
+      if (typeof response?.results === 'number') setTotal(response.results);
+      else if (typeof response?.data?.results === 'number') setTotal(response.data.results);
       const arr = Array.isArray(docs) ? docs : [];
-      // If user is admin, show all reviews. Otherwise filter by current user id.
-      let target = arr;
-      if (user?.role !== "admin") {
-        const currentUserId = (user as any)?._id ?? (user as any)?.id;
-        target = arr.filter((r: any) => {
-          const rid = r.user?._id ?? r.user?.id ?? r.user;
-          return String(rid) === String(currentUserId);
-        });
-      }
-
       // Enrich reviews to ensure experience has a real title
-      const enriched = await Promise.all(
-        target.map(async (r: any) => {
+      const enrichedBase = await Promise.all(
+        arr.map(async (r: any) => {
           const t = r.experience;
           // If populated with title, keep as is
           if (t && typeof t === 'object' && t.title) return r;
@@ -85,7 +92,28 @@ const MyReviews = () => {
         })
       );
 
-      setReviews(enriched);
+      // Apply visibility and filters after enrichment so titles can be searched
+      let filtered = enrichedBase;
+      if (user?.role !== "admin") {
+        const currentUserId = (user as any)?._id ?? (user as any)?.id;
+        filtered = enrichedBase.filter((r: any) => {
+          const rid = r.user?._id ?? r.user?.id ?? r.user;
+          return String(rid) === String(currentUserId);
+        });
+      } else {
+        // Client-side filtering for admin
+        if (search) {
+          const s = search.toLowerCase();
+          filtered = filtered.filter((r: any) => {
+            const title = String(r.experience?.title || r.tour?.name || "");
+            return title.toLowerCase().includes(s) || String(r.review || "").toLowerCase().includes(s);
+          });
+        }
+        if (minRating !== "") filtered = filtered.filter((r: any) => Number(r.rating) >= Number(minRating));
+        if (maxRating !== "") filtered = filtered.filter((r: any) => Number(r.rating) <= Number(maxRating));
+      }
+
+      setReviews(filtered);
     } catch (err: any) {
       console.error("Failed to fetch reviews:", err);
       setError(err.response?.data?.message || "Failed to load reviews");
@@ -97,7 +125,7 @@ const MyReviews = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [user, toast]);
+  }, [user, toast, search, minRating, maxRating, page, limit]);
 
   useEffect(() => {
     fetchReviews();
@@ -223,14 +251,35 @@ const MyReviews = () => {
                 className="text-center py-16"
               >
                 <p className="text-xl text-muted-foreground mb-6">
-                  You haven't written any reviews yet.
+                  No reviews found.
                 </p>
-                <Button variant="adventure" onClick={() => navigate("/tours")}>
-                  Browse Tours
+                <Button variant="adventure" onClick={() => navigate("/experiences")}>
+                  Browse Experiences
                 </Button>
               </motion.div>
             ) : (
               <div className="space-y-6">
+                {user?.role === 'admin' && (
+                  <Card>
+                    <CardContent className="p-4 grid grid-cols-1 md:grid-cols-4 gap-3">
+                      <div>
+                        <label className="text-sm">Search</label>
+                        <input className="mt-1 w-full border rounded px-2 py-1" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="experience or text" />
+                      </div>
+                      <div>
+                        <label className="text-sm">Min rating</label>
+                        <input type="number" min={1} max={5} className="mt-1 w-full border rounded px-2 py-1" value={minRating as any} onChange={(e) => setMinRating(e.target.value === '' ? '' : Math.min(5, Math.max(1, Number(e.target.value))))} />
+                      </div>
+                      <div>
+                        <label className="text-sm">Max rating</label>
+                        <input type="number" min={1} max={5} className="mt-1 w-full border rounded px-2 py-1" value={maxRating as any} onChange={(e) => setMaxRating(e.target.value === '' ? '' : Math.min(5, Math.max(1, Number(e.target.value))))} />
+                      </div>
+                      <div className="flex items-end">
+                        <Button variant="outline" onClick={() => fetchReviews()}>Apply</Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
                 {reviews.map((review, index) => {
                   const rid = review._id ?? review.id;
                   return (
@@ -245,7 +294,7 @@ const MyReviews = () => {
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
                               <CardTitle className="text-2xl mb-2">
-                                {review.tour?.name || "Tour Name"}
+                                {review.experience?.title || review.tour?.name || "Experience"}
                               </CardTitle>
                               <div className="flex items-center gap-2">
                                 {renderStars(review.rating)}
@@ -337,6 +386,11 @@ const MyReviews = () => {
                     </motion.div>
                   );
                 })}
+                <div className="flex items-center justify-center gap-3 pt-2">
+                  <Button variant="outline" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>Prev</Button>
+                  <span className="text-sm text-muted-foreground">Page {page}</span>
+                  <Button variant="outline" onClick={() => setPage(p => p + 1)} disabled={reviews.length < limit}>Next</Button>
+                </div>
               </div>
             )}
           </div>

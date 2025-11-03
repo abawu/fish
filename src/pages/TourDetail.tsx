@@ -34,8 +34,11 @@ const TourDetail = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [reviewPage, setReviewPage] = useState(1);
-  const [reviewLimit, setReviewLimit] = useState(5);
+  const [reviewLimit, setReviewLimit] = useState(50);
   const [reviewSort, setReviewSort] = useState("-createdAt");
+  const [showAllReviews, setShowAllReviews] = useState(false);
+  const [numGuests, setNumGuests] = useState<number>(1);
+  const [availability, setAvailability] = useState<{available: number; booked: number; maxGuests: number} | null>(null);
   const [newReview, setNewReview] = useState("");
   const [newRating, setNewRating] = useState(0);
   const [submittingReview, setSubmittingReview] = useState(false);
@@ -138,6 +141,25 @@ const TourDetail = () => {
     fetchReviews();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, toast, user, isAuthenticated, reviewPage, reviewLimit, reviewSort]);
+
+  useEffect(() => {
+    const loadAvailability = async () => {
+      if (!id) return;
+      try {
+        const resp = await bookingsAPI.getAvailability(id);
+        const data = resp.data || resp;
+        const a = data.data || data;
+        setAvailability(a);
+        // Adjust max for selector
+        if (a && a.available > 0) {
+          setNumGuests((g) => Math.min(g, a.available));
+        }
+      } catch {
+        // ignore
+      }
+    };
+    loadAvailability();
+  }, [id]);
 
   if (isLoading) {
     return (
@@ -288,6 +310,12 @@ const TourDetail = () => {
                   ({experience.ratingsQuantity} reviews)
                 </span>
               </div>
+              {availability && availability.available === 0 && (
+                <Badge variant="destructive">Sold out</Badge>
+              )}
+              {availability && availability.available > 0 && (
+                <Badge variant="secondary">{availability.available} left</Badge>
+              )}
             </div>
 
             <h1 className="font-display text-3xl md:text-5xl font-bold text-foreground mb-0">
@@ -482,7 +510,7 @@ const TourDetail = () => {
                     </Card>
                   ) : (
                     <div className="space-y-4">
-                      {reviews.map((review) => (
+                      {(showAllReviews ? reviews : reviews.slice(0, 3)).map((review) => (
                         <Card
                           key={review._id ?? review.id}
                           className="border-2"
@@ -509,42 +537,15 @@ const TourDetail = () => {
                           </CardContent>
                         </Card>
                       ))}
+                      </div>
+                  )}
+                  {reviews.length > 3 && (
+                    <div className="mt-4">
+                      <Button variant="outline" size="sm" onClick={() => setShowAllReviews((v) => !v)}>
+                        {showAllReviews ? 'Show less' : 'Show more'}
+                      </Button>
                     </div>
                   )}
-                  <div className="mt-4 flex items-center gap-3">
-                    <select
-                      value={reviewSort}
-                      onChange={(e) => setReviewSort(e.target.value)}
-                      className="px-2 py-1 border"
-                    >
-                      <option value="-createdAt">Newest</option>
-                      <option value="createdAt">Oldest</option>
-                      <option value="-rating">Highest rating</option>
-                      <option value="rating">Lowest rating</option>
-                    </select>
-                    <select
-                      value={reviewLimit}
-                      onChange={(e) => setReviewLimit(Number(e.target.value))}
-                      className="px-2 py-1 border"
-                    >
-                      <option value={5}>5 / page</option>
-                      <option value={10}>10 / page</option>
-                      <option value={20}>20 / page</option>
-                    </select>
-                    <button
-                      onClick={() => setReviewPage(Math.max(1, reviewPage - 1))}
-                      className="px-2 py-1 border"
-                    >
-                      Prev
-                    </button>
-                    <span>Page {reviewPage}</span>
-                    <button
-                      onClick={() => setReviewPage((r) => r + 1)}
-                      className="px-2 py-1 border"
-                    >
-                      Next
-                    </button>
-                  </div>
                 </div>
               </div>
 
@@ -559,6 +560,26 @@ const TourDetail = () => {
                       <p className="text-5xl font-bold text-primary">
                         ETB {experience.price}
                       </p>
+                    </div>
+
+                    <div className="mb-6">
+                      <label className="text-sm font-medium">Number of Guests</label>
+                      <div className="mt-2 flex items-center gap-2">
+                        <input
+                          type="number"
+                          min={1}
+                          max={Math.max(1, Number(experience.maxGuests) || 1)}
+                          value={numGuests}
+                          onChange={(e) => setNumGuests(Math.max(1, Math.min(Number(e.target.value || 1), Number(experience.maxGuests) || 1)))}
+                          className="w-24 border rounded px-2 py-2"
+                        />
+                        <span className="text-sm text-muted-foreground">Max {experience.maxGuests}</span>
+                      </div>
+                      <div className="mt-2 text-sm">Total: <span className="font-semibold">ETB {Number(experience.price) * (numGuests || 1)}</span></div>
+                      <div className="mt-1 text-xs text-muted-foreground">Spots left: {availability?.available ?? experience.maxGuests}</div>
+                      {availability && availability.available > 0 && numGuests >= availability.available && (
+                        <div className="mt-1 text-xs text-amber-700">Maximum available is {availability.available}.</div>
+                      )}
                     </div>
 
                     {/* Host */}
@@ -623,6 +644,7 @@ const TourDetail = () => {
                         variant="hero"
                         size="xl"
                         className="w-full mb-3"
+                        disabled={((availability?.available ?? 1) < 1) || (numGuests > (availability?.available ?? (Number(experience.maxGuests) || 1)))}
                         onClick={async () => {
                           if (!isAuthenticated) {
                             toast({
@@ -640,11 +662,12 @@ const TourDetail = () => {
                               description:
                                 "You will be redirected to complete payment",
                             });
-                            const resp = await bookingsAPI.create(id as string);
+                            const resp = await bookingsAPI.create(id as string, numGuests);
                             const checkoutUrl =
                               resp.checkout_url || resp.data?.checkout_url;
                             if (checkoutUrl) {
                               // redirect browser to checkout
+                              // include qty in return so we can show it on MyBookings immediately if needed
                               window.location.href = checkoutUrl;
                             } else {
                               throw new Error(

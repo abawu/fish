@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
-import { hostApplicationAPI } from "@/lib/api";
+import { hostApplicationAPI, usersAPI } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,6 +46,10 @@ export default function HostApplication() {
     specialties: [] as string[],
     previousExperience: "",
   });
+
+  // CBE bank info (visible during application, saved to user profile)
+  const [cbeAccountName, setCbeAccountName] = useState(user?.cbeAccountName || "");
+  const [cbeAccountNumber, setCbeAccountNumber] = useState(user?.cbeAccountNumber || "");
 
   const [media, setMedia] = useState({
     nationalIdFront: "",
@@ -155,6 +159,14 @@ export default function HostApplication() {
       try {
         setIsLoading(true);
         await hostApplicationAPI.updateExperienceDetails(experienceDetails);
+        // Save CBE bank info if provided
+        if (cbeAccountName || cbeAccountNumber) {
+          try {
+            await usersAPI.updateMe({ cbeAccountName: cbeAccountName || undefined, cbeAccountNumber: cbeAccountNumber || undefined });
+          } catch (e) {
+            // ignore minor failure here; user can add later in Profile
+          }
+        }
         setCurrentStep(3);
       } catch (error: any) {
         toast({
@@ -545,6 +557,31 @@ export default function HostApplication() {
                           placeholder="Tell us about your previous experience as a host or in the tourism industry..."
                           rows={5}
                         />
+                      </div>
+
+                      <div className="pt-2 border-t">
+                        <h4 className="font-semibold mb-2">CBE Account (for payouts)</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="cbeAccountName">Account Name</Label>
+                            <Input
+                              id="cbeAccountName"
+                              value={cbeAccountName}
+                              onChange={(e) => setCbeAccountName(e.target.value)}
+                              placeholder="Full account name"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="cbeAccountNumber">Account Number</Label>
+                            <Input
+                              id="cbeAccountNumber"
+                              value={cbeAccountNumber}
+                              onChange={(e) => setCbeAccountNumber(e.target.value.replace(/[^0-9]/g, ''))}
+                              placeholder="Numbers only"
+                            />
+                          </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">You can edit this later in your Profile.</p>
                       </div>
                     </div>
                   )}

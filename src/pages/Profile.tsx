@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import Navigation from "@/components/Navigation";
@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { motion } from "framer-motion";
-import { User, Mail, LogOut, Edit, Save, X, BarChart3, MapPin } from "lucide-react";
+import { User, Mail, LogOut, Edit, Save, X, MapPin, Wallet as WalletIcon, Banknote, CreditCard } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { usersAPI } from "@/lib/api";
 
@@ -20,6 +20,17 @@ const Profile = () => {
   const [name, setName] = useState(user?.name || "");
   const [email, setEmail] = useState(user?.email || "");
   const [isLoading, setIsLoading] = useState(false);
+
+  // Bank info local state
+  const [bankEditing, setBankEditing] = useState(false);
+  const [accountName, setAccountName] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+
+  useEffect(() => {
+    // Prefill from user if available
+    if ((user as any)?.cbeAccountName) setAccountName((user as any).cbeAccountName);
+    if ((user as any)?.cbeAccountNumber) setAccountNumber((user as any).cbeAccountNumber);
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -48,7 +59,6 @@ const Profile = () => {
         description: "Your profile has been updated successfully",
       });
       setIsEditing(false);
-      // Update local storage with new user data
       const updatedUser = { ...(user as any), name, email };
       updateUser(updatedUser as any);
     } catch (error: any) {
@@ -68,6 +78,21 @@ const Profile = () => {
     setEmail(user?.email || "");
     setIsEditing(false);
   };
+
+  const saveBankInfo = async () => {
+    try {
+      await usersAPI.updateMe({ cbeAccountName: accountName || undefined, cbeAccountNumber: accountNumber || undefined });
+      // Update auth context so other pages (Wallet) see fresh values immediately
+      const updatedUser = { ...(user as any), cbeAccountName: accountName || undefined, cbeAccountNumber: accountNumber || undefined };
+      (updateUser as any)(updatedUser);
+      toast({ title: "CBE account saved", description: "Used for withdrawals." });
+      setBankEditing(false);
+    } catch (e) {
+      toast({ title: "Failed to save", variant: "destructive" });
+    }
+  };
+
+  const mask = (val: string) => (val ? `****${String(val).slice(-4)}` : "—");
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -169,6 +194,41 @@ const Profile = () => {
                     </div>
                   )}
 
+                  {/* Bank Info - CBE only, visible to approved hosts (not admin) */}
+                  {user?.hostStatus === "approved" && user?.role !== "admin" && (
+                  <div className="pt-4 border-t space-y-3">
+                    <div className="flex items-center gap-2">
+                      <CreditCard className="w-4 h-4 text-primary" />
+                      <p className="text-sm font-medium text-muted-foreground">CBE Account (used for withdrawals)</p>
+                    </div>
+                    {!bankEditing ? (
+                      <>
+                        <div className="grid grid-cols-1 gap-2 text-sm text-muted-foreground">
+                          <div>Bank: <span className="text-foreground">CBE</span></div>
+                          <div>Account Name: <span className="text-foreground">{accountName || '—'}</span></div>
+                          <div>Account Number: <span className="text-foreground">{mask(accountNumber)}</span></div>
+                        </div>
+                        <Button variant="outline" onClick={() => setBankEditing(true)} className="w-full">Edit Bank Info</Button>
+                      </>
+                    ) : (
+                      <div className="space-y-3">
+                        <div>
+                          <Label>Account Name</Label>
+                          <Input value={accountName} onChange={(e) => setAccountName(e.target.value)} />
+                        </div>
+                        <div>
+                          <Label>Account Number</Label>
+                          <Input value={accountNumber} onChange={(e) => setAccountNumber(e.target.value.replace(/[^0-9]/g, ''))} />
+                        </div>
+                        <div className="flex gap-2">
+                          <Button variant="hero" onClick={saveBankInfo} className="flex-1">Save</Button>
+                          <Button variant="outline" onClick={() => setBankEditing(false)} className="flex-1">Cancel</Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  )}
+
                   <div className="pt-4 border-t space-y-3">
                     <Button
                       variant="outline"
@@ -178,14 +238,16 @@ const Profile = () => {
                     >
                       My Bookings
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="lg"
-                      onClick={() => navigate("/my-reviews")}
-                      className="w-full"
-                    >
-                      {user?.role === "admin" ? "All Reviews" : "My Reviews"}
-                    </Button>
+                    {user?.role !== "admin" && (
+                      <Button
+                        variant="outline"
+                        size="lg"
+                        onClick={() => navigate("/my-reviews")}
+                        className="w-full"
+                      >
+                        My Reviews
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       size="lg"
@@ -195,7 +257,6 @@ const Profile = () => {
                       Change Password
                     </Button>
 
-                    {/* Admin Only Links */}
                     {user?.role === "admin" && (
                       <>
                         <div className="pt-4 border-t">
@@ -214,7 +275,6 @@ const Profile = () => {
                       </>
                     )}
 
-                    {/* Host Application */}
                     {user?.hostStatus !== "approved" && user?.role !== "admin" && (
                       <>
                         <div className="pt-4 border-t">
@@ -236,7 +296,6 @@ const Profile = () => {
                       </>
                     )}
 
-                    {/* Host Panel - For Approved Hosts */}
                     {user?.hostStatus === "approved" && user?.role !== "admin" && (
                       <>
                         <div className="pt-4 border-t">
@@ -253,6 +312,26 @@ const Profile = () => {
                           <MapPin className="w-4 h-4 mr-2" />
                           Manage My Experiences
                         </Button>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <Button
+                            variant="outline"
+                            size="lg"
+                            onClick={() => navigate("/host/wallet")}
+                            className="w-full"
+                          >
+                            <WalletIcon className="w-4 h-4 mr-2" />
+                            Wallet
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="lg"
+                            onClick={() => navigate("/host/withdrawals")}
+                            className="w-full"
+                          >
+                            <Banknote className="w-4 h-4 mr-2" />
+                            Withdrawals
+                          </Button>
+                        </div>
                       </>
                     )}
 
@@ -265,7 +344,6 @@ const Profile = () => {
                       onClick={handleLogout}
                       className="w-full"
                     >
-                      <LogOut className="mr-2 h-4 w-4" />
                       Log Out
                     </Button>
                   </div>
