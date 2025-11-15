@@ -296,6 +296,27 @@ const Profile = () => {
                       </>
                     )}
 
+                    {user?.guideStatus !== "approved" && user?.role !== "admin" && (
+                      <>
+                        <div className="pt-4 border-t">
+                          <p className="text-sm font-medium text-muted-foreground mb-3">
+                            Become a Guide
+                          </p>
+                        </div>
+                        <Button
+                          variant="hero"
+                          size="lg"
+                          onClick={() => navigate("/guide-application")}
+                          className="w-full"
+                          disabled={user?.guideStatus === "pending"}
+                        >
+                          {user?.guideStatus === "pending"
+                            ? "Application Pending Review"
+                            : "Apply to Become a Guide"}
+                        </Button>
+                      </>
+                    )}
+
                     {user?.hostStatus === "approved" && user?.role !== "admin" && (
                       <>
                         <div className="pt-4 border-t">

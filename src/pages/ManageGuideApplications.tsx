@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import Navigation from "@/components/Navigation";
@@ -26,14 +26,11 @@ import {
   FileText,
   Image as ImageIcon,
 } from "lucide-react";
-import { hostApplicationAPI, guidesAPI } from "@/lib/api";
+import { guideApplicationAPI } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-const NO_GUIDE_VALUE = "__NO_GUIDE__";
-
-export default function ManageHostApplications() {
-  const { user, isLoading: authLoading } = useAuth();
+export default function ManageGuideApplications() {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [applications, setApplications] = useState<any[]>([]);
@@ -44,168 +41,53 @@ export default function ManageHostApplications() {
   const [rejectionReason, setRejectionReason] = useState("");
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
-  const [guides, setGuides] = useState<any[]>([]);
-  const [selectedGuideId, setSelectedGuideId] = useState<string>(""); // empty string means no guide
-  const [isLoadingGuides, setIsLoadingGuides] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const isMountedRef = useRef(true);
 
   useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    // Wait for auth to load
-    if (authLoading) {
-      return;
-    }
-
     // Redirect if not admin
-    if (!user || user.role !== "admin") {
+    if (user?.role !== "admin") {
       navigate("/");
-      // Delay toast to avoid state update on unmounted component
-      setTimeout(() => {
-        if (isMountedRef.current) {
-          toast({
-            title: "Access Denied",
-            description: "Admin access required",
-            variant: "destructive",
-          });
-        }
-      }, 100);
+      toast({
+        title: "Access Denied",
+        description: "Admin access required",
+        variant: "destructive",
+      });
       return;
     }
 
     fetchApplications();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, authLoading, navigate]);
+  }, [user, navigate, toast]);
 
   const fetchApplications = async () => {
-    if (!isMountedRef.current) return;
-    
     try {
       setIsLoading(true);
-      setError(null);
-      const response = await hostApplicationAPI.getPendingApplications();
-      
-      if (!isMountedRef.current) return;
-      
-      // Handle different response structures
-      const applications = response?.data?.applications || response?.applications || [];
-      setApplications(Array.isArray(applications) ? applications : []);
+      const response = await guideApplicationAPI.getPendingApplications();
+      setApplications(response.data.applications || []);
     } catch (err: any) {
       console.error("Failed to fetch applications:", err);
-      
-      if (!isMountedRef.current) return;
-      
-      setApplications([]); // Set empty array on error to prevent crashes
-      const errorMessage = err.response?.data?.message || err.message || "Failed to load host applications";
-      setError(errorMessage);
       toast({
         title: "Error",
-        description: errorMessage,
+        description: "Failed to load guide applications",
         variant: "destructive",
       });
     } finally {
-      if (isMountedRef.current) {
-        setIsLoading(false);
-      }
+      setIsLoading(false);
     }
   };
 
-  const handleViewDetails = async (application: any) => {
-    if (!application) {
-      console.error("No application provided to handleViewDetails");
-      return;
-    }
-
-    try {
-      setSelectedApplication(application);
-      setIsDetailsOpen(true);
-      setSelectedGuideId("");
-      setGuides([]); // Reset guides
-      
-      // Fetch guides filtered by host's location
-      try {
-        setIsLoadingGuides(true);
-        const location = application?.personalInfo?.cityRegion;
-        
-        try {
-          const response = await guidesAPI.getAll(location);
-          
-          if (!isMountedRef.current) return;
-          
-          // Backend returns: { status: 'success', data: { guides: [...] } }
-          // guidesAPI.getAll returns response.data, so we get: { status: 'success', data: { guides: [...] } }
-          let guides: any[] = [];
-          
-          try {
-            if (response && typeof response === 'object') {
-              // Try different response structures
-              if (Array.isArray(response)) {
-                guides = response;
-              } else if (Array.isArray(response.data?.guides)) {
-                guides = response.data.guides;
-              } else if (Array.isArray(response.data?.data?.guides)) {
-                guides = response.data.data.guides;
-              } else if (Array.isArray(response.guides)) {
-                guides = response.guides;
-              }
-            }
-            
-            // Filter and set guides safely
-            if (isMountedRef.current) {
-              const validGuides = Array.isArray(guides) 
-                ? guides.filter(g => g && (g._id || g.id) && g.name)
-                : [];
-              setGuides(validGuides);
-            }
-          } catch (parseErr: any) {
-            console.error("Error parsing guides response:", parseErr, response);
-            if (isMountedRef.current) {
-              setGuides([]);
-            }
-          }
-        } catch (apiErr: any) {
-          console.error("API error fetching guides:", apiErr);
-          // Still show dialog even if guides fail to load
-          if (isMountedRef.current) {
-            setGuides([]);
-          }
-        }
-      } catch (err: any) {
-        console.error("Error in guides fetch:", err);
-        // Still show dialog even if guides fail to load
-        if (isMountedRef.current) {
-          setGuides([]);
-        }
-      } finally {
-        if (isMountedRef.current) {
-          setIsLoadingGuides(false);
-        }
-      }
-    } catch (err: any) {
-      console.error("Error in handleViewDetails:", err);
-      // Ensure dialog still opens even if there's an error
-      if (isMountedRef.current) {
-        setGuides([]);
-      }
-    }
+  const handleViewDetails = (application: any) => {
+    setSelectedApplication(application);
+    setIsDetailsOpen(true);
   };
 
   const handleApprove = async (applicationId: string) => {
     try {
       setIsProcessing(true);
-      await hostApplicationAPI.approveApplication(applicationId, selectedGuideId || undefined);
+      await guideApplicationAPI.approveApplication(applicationId);
       toast({
         title: "Application Approved",
-        description: selectedGuideId ? "Host application has been approved and guide assigned successfully." : "Host application has been approved successfully.",
+        description: "Guide application has been approved successfully.",
       });
       setIsDetailsOpen(false);
-      setSelectedGuideId("");
       fetchApplications();
     } catch (err: any) {
       toast({
@@ -230,10 +112,10 @@ export default function ManageHostApplications() {
 
     try {
       setIsProcessing(true);
-      await hostApplicationAPI.rejectApplication(applicationId, rejectionReason);
+      await guideApplicationAPI.rejectApplication(applicationId, rejectionReason);
       toast({
         title: "Application Rejected",
-        description: "Host application has been rejected.",
+        description: "Guide application has been rejected.",
       });
       setIsDetailsOpen(false);
       setShowRejectDialog(false);
@@ -263,44 +145,15 @@ export default function ManageHostApplications() {
     }
   };
 
-  if (authLoading || isLoading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex flex-col">
         <Navigation />
         <main className="flex-1 pt-16 flex items-center justify-center">
           <div className="text-center">
             <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
-            <p className="text-lg">{authLoading ? "Loading..." : "Loading applications..."}</p>
+            <p className="text-lg">Loading applications...</p>
           </div>
-        </main>
-        <Footer />
-      </div>
-    );
-  }
-
-  // Show nothing if user is not admin (will redirect)
-  if (!user || user.role !== "admin") {
-    return null;
-  }
-
-  // Show error state if there's an error
-  if (error && applications.length === 0) {
-    return (
-      <div className="min-h-screen flex flex-col">
-        <Navigation />
-        <main className="flex-1 pt-16 flex items-center justify-center">
-          <Card className="border-2 border-destructive max-w-md">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-3 text-destructive mb-4">
-                <AlertCircle className="w-6 h-6" />
-                <h3 className="text-lg font-semibold">Error Loading Applications</h3>
-              </div>
-              <p className="text-muted-foreground mb-4">{error}</p>
-              <Button onClick={fetchApplications} variant="outline" className="w-full">
-                Try Again
-              </Button>
-            </CardContent>
-          </Card>
         </main>
         <Footer />
       </div>
@@ -324,10 +177,10 @@ export default function ManageHostApplications() {
             >
               <h1 className="font-display text-5xl md:text-6xl font-bold mb-6 flex items-center gap-4">
                 <UserCheck className="w-12 h-12" />
-                Host Applications
+                Guide Applications
               </h1>
               <p className="text-lg text-primary-foreground/90">
-                Review and manage host applications
+                Review and manage guide applications
               </p>
             </motion.div>
           </div>
@@ -342,13 +195,13 @@ export default function ManageHostApplications() {
                   <Users className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
                   <h3 className="text-xl font-semibold mb-2">No Pending Applications</h3>
                   <p className="text-muted-foreground">
-                    There are no host applications to review at this time.
+                    There are no guide applications to review at this time.
                   </p>
                 </CardContent>
               </Card>
             ) : (
               <div className="space-y-4">
-                {applications.filter(app => app && app._id).map((application) => (
+                {applications.map((application) => (
                   <motion.div
                     key={application._id}
                     initial={{ opacity: 0, y: 20 }}
@@ -381,13 +234,7 @@ export default function ManageHostApplications() {
                             {application.submittedAt && (
                               <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
                                 <Calendar className="w-4 h-4" />
-                                Submitted: {(() => {
-                                  try {
-                                    return new Date(application.submittedAt).toLocaleDateString();
-                                  } catch {
-                                    return "Invalid date";
-                                  }
-                                })()}
+                                Submitted: {new Date(application.submittedAt).toLocaleDateString()}
                               </div>
                             )}
                           </div>
@@ -412,34 +259,18 @@ export default function ManageHostApplications() {
       <Footer />
 
       {/* Application Details Dialog */}
-      <Dialog open={isDetailsOpen} onOpenChange={(open) => {
-        setIsDetailsOpen(open);
-        if (!open) {
-          // Reset state when dialog closes
-          setSelectedApplication(null);
-          setGuides([]);
-          setSelectedGuideId("");
-        }
-      }}>
+      <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-2xl">Application Details</DialogTitle>
             <DialogDescription>
-              Review the complete host application
+              Review the complete guide application
             </DialogDescription>
           </DialogHeader>
 
-          {isLoadingGuides && (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              <span className="ml-3 text-muted-foreground">Loading application details...</span>
-            </div>
-          )}
-
-          {!isLoadingGuides && selectedApplication ? (
+          {selectedApplication && (
             <div className="space-y-6">
               {/* Personal Information */}
-              {selectedApplication.personalInfo && (
               <div>
                 <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
                   <Users className="w-5 h-5" />
@@ -469,9 +300,7 @@ export default function ManageHostApplications() {
                   <div className="col-span-2">
                     <span className="font-medium">Languages Spoken:</span>
                     <p className="text-muted-foreground">
-                      {Array.isArray(selectedApplication.personalInfo?.languagesSpoken) 
-                        ? selectedApplication.personalInfo.languagesSpoken.filter((lang: any) => lang && typeof lang === 'string').join(", ") || "Not provided"
-                        : "Not provided"}
+                      {selectedApplication.personalInfo?.languagesSpoken?.join(", ") || "Not provided"}
                     </p>
                   </div>
                   <div className="col-span-2">
@@ -480,7 +309,6 @@ export default function ManageHostApplications() {
                   </div>
                 </div>
               </div>
-              )}
 
               {/* Experience Details */}
               {selectedApplication.experienceDetails?.previousExperience && (
@@ -511,9 +339,6 @@ export default function ManageHostApplications() {
                           alt="National ID Front"
                           className="w-full h-48 object-cover rounded-lg border cursor-pointer hover:opacity-80 transition-opacity"
                           onClick={() => setFullscreenImage(selectedApplication.media.nationalIdFront)}
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = 'none';
-                          }}
                         />
                       </div>
                     )}
@@ -526,9 +351,6 @@ export default function ManageHostApplications() {
                           alt="National ID Back"
                           className="w-full h-48 object-cover rounded-lg border cursor-pointer hover:opacity-80 transition-opacity"
                           onClick={() => setFullscreenImage(selectedApplication.media.nationalIdBack)}
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = 'none';
-                          }}
                         />
                       </div>
                     )}
@@ -542,125 +364,48 @@ export default function ManageHostApplications() {
                         alt="Personal"
                         className="w-48 h-48 object-cover rounded-lg border cursor-pointer hover:opacity-80 transition-opacity"
                         onClick={() => setFullscreenImage(selectedApplication.media.personalPhoto)}
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none';
-                        }}
                       />
                     </div>
                   )}
 
-                  {Array.isArray(selectedApplication.media?.hostingEnvironmentPhotos) && 
-                   selectedApplication.media.hostingEnvironmentPhotos.length > 0 && (
+                  {selectedApplication.media?.tourGuideCertificate && (
                     <div>
-                      <p className="font-medium text-sm mb-2">Hosting Environment Photos:</p>
-                      <div className="grid grid-cols-3 gap-4">
-                        {selectedApplication.media.hostingEnvironmentPhotos
-                          .filter((photo: any) => photo && typeof photo === 'string')
-                          .map((photo: string, index: number) => (
-                          <img
-                            key={index}
-                            src={photo}
-                            alt={`Environment ${index + 1}`}
-                            className="w-full h-32 object-cover rounded-lg border cursor-pointer hover:opacity-80 transition-opacity"
-                            onClick={() => setFullscreenImage(photo)}
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).style.display = 'none';
-                            }}
-                          />
-                        ))}
-                      </div>
+                      <p className="font-medium text-sm mb-2">Tour Guide Certificate:</p>
+                      {selectedApplication.media.tourGuideCertificate.endsWith('.pdf') || selectedApplication.media.tourGuideCertificate.includes('pdf') ? (
+                        <div className="p-4 border rounded-lg bg-gray-50">
+                          <a
+                            href={selectedApplication.media.tourGuideCertificate}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline"
+                          >
+                            View PDF Certificate
+                          </a>
+                        </div>
+                      ) : (
+                        <img
+                          src={selectedApplication.media.tourGuideCertificate}
+                          alt="Tour Guide Certificate"
+                          className="w-full h-64 object-contain rounded-lg border cursor-pointer hover:opacity-80 transition-opacity"
+                          onClick={() => setFullscreenImage(selectedApplication.media.tourGuideCertificate)}
+                        />
+                      )}
                     </div>
                   )}
 
                   {!selectedApplication.media?.nationalIdFront && 
                    !selectedApplication.media?.nationalIdBack &&
                    !selectedApplication.media?.personalPhoto && 
-                   (!selectedApplication.media?.hostingEnvironmentPhotos || 
-                    selectedApplication.media.hostingEnvironmentPhotos.length === 0) && (
+                   !selectedApplication.media?.tourGuideCertificate && (
                     <p className="text-sm text-muted-foreground italic">No media uploaded</p>
                   )}
                 </div>
               </div>
 
-              {/* Guide Assignment */}
-              <div className="pt-4 border-t">
-                <h3 className="text-lg font-semibold mb-3">Assign Guide (Optional)</h3>
-                <div className="space-y-2">
-                  <Label htmlFor="guideSelect">Select a guide to assign to this host:</Label>
-                  {isLoadingGuides ? (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Loading guides...
-                    </div>
-                  ) : guides.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No guides available. You can approve without assigning a guide.</p>
-                  ) : (
-                  <Select 
-                    value={selectedGuideId || NO_GUIDE_VALUE} 
-                    onValueChange={(value) => {
-                      try {
-                        if (value === NO_GUIDE_VALUE) {
-                          setSelectedGuideId("");
-                        } else {
-                          setSelectedGuideId(value);
-                        }
-                      } catch (err) {
-                        console.error("Error setting selected guide:", err);
-                      }
-                    }}
-                  >
-                      <SelectTrigger id="guideSelect">
-                        <SelectValue placeholder="Select a guide (optional)" />
-                      </SelectTrigger>
-                      <SelectContent>
-                      <SelectItem value={NO_GUIDE_VALUE}>None (Approve without guide)</SelectItem>
-                        {guides
-                          .filter((guide) => {
-                            if (!guide) return false;
-                            const guideId = guide._id ?? guide.id;
-                            const value = typeof guideId === "string" ? guideId.trim() : guideId;
-                            return Boolean(value) && Boolean(guide.name);
-                          })
-                          .map((guide) => {
-                            try {
-                              const guideId = guide._id ?? guide.id;
-                              if (!guideId) return null;
-                              const value = String(guideId).trim();
-                              if (!value) return null;
-                              return (
-                                <SelectItem key={value} value={value}>
-                                  {String(guide.name || "Unknown")} - {String(guide.location || "No location")}
-                                </SelectItem>
-                              );
-                            } catch (err) {
-                              console.error("Error rendering guide item:", err, guide);
-                              return null;
-                            }
-                          })}
-                      </SelectContent>
-                    </Select>
-                  )}
-                  {selectedApplication.personalInfo?.cityRegion && (
-                    <p className="text-xs text-muted-foreground">
-                      Showing guides from: {selectedApplication.personalInfo.cityRegion}
-                    </p>
-                  )}
-                </div>
-              </div>
-
               {/* Action Buttons */}
-              {selectedApplication && selectedApplication._id && (
               <div className="flex gap-3 pt-4 border-t">
                 <Button
-                  onClick={() => {
-                    try {
-                      if (selectedApplication?._id) {
-                        handleApprove(selectedApplication._id);
-                      }
-                    } catch (err) {
-                      console.error("Error approving application:", err);
-                    }
-                  }}
+                  onClick={() => handleApprove(selectedApplication._id)}
                   disabled={isProcessing}
                   className="flex-1 bg-green-600 hover:bg-green-700"
                 >
@@ -681,14 +426,8 @@ export default function ManageHostApplications() {
                   Reject Application
                 </Button>
               </div>
-              )}
             </div>
-          ) : !isLoadingGuides ? (
-            <div className="flex items-center justify-center py-8">
-              <AlertCircle className="w-8 h-8 text-destructive" />
-              <span className="ml-3 text-muted-foreground">No application data available</span>
-            </div>
-          ) : null}
+          )}
         </DialogContent>
       </Dialog>
 

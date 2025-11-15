@@ -24,6 +24,10 @@ import UserManagement from "./pages/UserManagement";
 import ManageHostApplications from "./pages/ManageHostApplications";
 import HostManagement from "./pages/HostManagement";
 import HostApplication from "./pages/HostApplication";
+import GuideApplication from "./pages/GuideApplication";
+import ManageGuideApplications from "./pages/ManageGuideApplications";
+import GuideManagement from "./pages/GuideManagement";
+import GuideDashboard from "./pages/GuideDashboard";
 import Contact from "./pages/Contact";
 import NotFound from "./pages/NotFound";
 import Wallet from "./pages/Wallet";
@@ -161,6 +165,38 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <HostApplication />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/guide-application"
+              element={
+                <ProtectedRoute>
+                  <GuideApplication />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/guide-applications"
+              element={
+                <ProtectedRoute>
+                  <ManageGuideApplications />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/guide-management"
+              element={
+                <ProtectedRoute>
+                  <GuideManagement />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/guide/dashboard"
+              element={
+                <ProtectedRoute>
+                  <GuideDashboard />
                 </ProtectedRoute>
               }
             />

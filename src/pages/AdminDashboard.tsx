@@ -318,6 +318,24 @@ const AdminDashboard = () => {
                     <Button
                       variant="outline"
                       size="lg"
+                      onClick={() => navigate("/admin/guide-applications")}
+                      className="w-full"
+                    >
+                      <UserCheck className="w-4 h-4 mr-2" />
+                      Guide Applications
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      onClick={() => navigate("/admin/guide-management")}
+                      className="w-full"
+                    >
+                      <Users className="w-4 h-4 mr-2" />
+                      Guide Management
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="lg"
                       onClick={() => navigate("/my-reviews")}
                       className="w-full"
                     >

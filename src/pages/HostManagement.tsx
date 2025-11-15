@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import Navigation from "@/components/Navigation";
@@ -25,9 +25,12 @@ import {
   Briefcase,
   Home,
   IdCard,
+  User,
 } from "lucide-react";
-import { usersAPI, experiencesAPI } from "@/lib/api";
+import { usersAPI, experiencesAPI, guidesAPI } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -37,8 +40,10 @@ import {
 } from "@/components/ui/dialog";
 import api from "@/lib/api";
 
+const NO_GUIDE_VALUE = "__NO_GUIDE__";
+
 export default function HostManagement() {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [hosts, setHosts] = useState<any[]>([]);
@@ -48,25 +53,52 @@ export default function HostManagement() {
   const [selectedHost, setSelectedHost] = useState<any>(null);
   const [selectedApplication, setSelectedApplication] = useState<any>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [guides, setGuides] = useState<any[]>([]);
+  const [selectedGuideId, setSelectedGuideId] = useState<string>(""); // empty string = no guide
+  const [isLoadingGuides, setIsLoadingGuides] = useState(false);
+  const [isReassigning, setIsReassigning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    // Wait for auth to load
+    if (authLoading) {
+      return;
+    }
+
     // Redirect if not admin
-    if (user?.role !== "admin") {
+    if (!user || user.role !== "admin") {
       navigate("/");
-      toast({
-        title: "Access Denied",
-        description: "Admin access required",
-        variant: "destructive",
-      });
+      // Delay toast to avoid state update on unmounted component
+      setTimeout(() => {
+        if (isMountedRef.current) {
+          toast({
+            title: "Access Denied",
+            description: "Admin access required",
+            variant: "destructive",
+          });
+        }
+      }, 100);
       return;
     }
 
     fetchData();
-  }, [user, navigate, toast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, authLoading, navigate]);
 
   const fetchData = async () => {
+    if (!isMountedRef.current) return;
+
     try {
       setIsLoading(true);
+      setError(null);
       
       // Fetch all users and filter approved hosts
       const [usersResponse, experiencesResponse] = await Promise.all([
@@ -74,121 +106,250 @@ export default function HostManagement() {
         experiencesAPI.getAll(),
       ]);
 
-      const allUsers = usersResponse.data.data;
-      const approvedHosts = allUsers.filter(
-        (u: any) => u.hostStatus === "approved"
-      );
+      if (!isMountedRef.current) return;
+
+      const allUsers = usersResponse?.data?.data || usersResponse?.data || [];
+      const approvedHosts = Array.isArray(allUsers) 
+        ? allUsers.filter((u: any) => u.hostStatus === "approved")
+        : [];
       
       setHosts(approvedHosts);
-      setAllExperiences(experiencesResponse.data.data || []);
+      setAllExperiences(experiencesResponse?.data?.data || experiencesResponse?.data || []);
 
-      // Fetch all host applications for approved hosts
-      const applications: any[] = [];
-      for (const host of approvedHosts) {
-        try {
-          const hostId = host._id || host.id;
-          console.log(`Fetching application for host: ${host.name} (ID: ${hostId})`);
-          const response = await api.get(`/host-applications/user/${hostId}`);
-          if (response.data?.data?.application) {
-            applications.push(response.data.data.application);
-            console.log(`✓ Found application for ${host.name}`);
-          } else {
-            console.log(`✗ No application data for ${host.name}`);
-          }
-        } catch (error: any) {
-          console.log(`✗ No application found for host: ${host.name}`, error.response?.status);
-        }
-      }
-      
-      setHostApplications(applications);
-      console.log(`Loaded ${applications.length} applications out of ${approvedHosts.length} hosts`);
+      // Don't fetch applications on initial load - fetch them lazily when needed
+      // This reduces the number of queries significantly
+      setHostApplications([]);
 
     } catch (err: any) {
       console.error("Failed to fetch hosts:", err);
+      
+      if (!isMountedRef.current) return;
+      
+      const errorMessage = err.response?.data?.message || err.message || "Failed to load host data";
+      setError(errorMessage);
+      setHosts([]);
+      setAllExperiences([]);
       toast({
         title: "Error",
-        description: "Failed to load host data",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
   };
 
   const handleViewDetails = async (host: any) => {
-    setSelectedHost(host);
-    
-    const hostId = host._id || host.id;
-    console.log("Looking for application for host:", hostId);
-    console.log("Available applications:", hostApplications.map((app: any) => ({
-      userId: app.user,
-      userName: app.user?.name
-    })));
-    
-    // Find the application for this host
-    let application = hostApplications.find(
-      (app: any) => {
-        const appUserId = app.user?._id || app.user?.id || app.user;
-        return String(appUserId) === String(hostId);
+    if (!host) {
+      console.error("No host provided to handleViewDetails");
+      return;
+    }
+
+    try {
+      setSelectedHost(host);
+      setSelectedApplication(null); // Reset application
+      setGuides([]); // Reset guides
+      setIsLoadingGuides(true);
+      setIsDialogOpen(true); // Open dialog immediately
+      
+      // Handle both populated and unpopulated assignedGuide
+      const guideId = typeof host.assignedGuide === 'object' 
+        ? (host.assignedGuide._id || host.assignedGuide.id)
+        : host.assignedGuide;
+      setSelectedGuideId(guideId || "");
+      
+      const hostId = host._id || host.id;
+      if (!hostId) {
+        console.error("Host ID is missing");
+        setIsLoadingGuides(false);
+        return;
       }
-    );
-    
-    console.log("Found application:", application ? "Yes" : "No");
-    
-    // If not found in cache, try to fetch directly
-    if (!application) {
+      
+      // Fetch guides and application in parallel with better error handling
       try {
-        console.log("Fetching application directly for:", hostId);
-        const response = await api.get(`/host-applications/user/${hostId}`);
-        if (response.data?.data?.application) {
-          application = response.data.data.application;
-          console.log("Successfully fetched application");
+        const [guidesResponse, applicationResponse] = await Promise.allSettled([
+          guidesAPI.getAll().catch(err => {
+            console.error("Guides API error:", err);
+            return { data: { guides: [] } };
+          }),
+          api.get(`/host-applications/user/${hostId}`).catch(err => {
+            // 404 is expected for hosts without applications
+            if (err.response?.status === 404) {
+              return { data: { data: { application: null } } };
+            }
+            console.error("Application API error:", err);
+            return { data: { data: { application: null } } };
+          })
+        ]);
+        
+        // Handle guides response safely
+        try {
+          if (!isMountedRef.current) return;
+          
+          if (guidesResponse.status === 'fulfilled') {
+            const response = guidesResponse.value;
+            // Handle different response structures
+            const guides = response?.data?.guides || response?.data?.data?.guides || response?.guides || [];
+            if (isMountedRef.current) {
+              setGuides(Array.isArray(guides) ? guides.filter(g => g && (g._id || g.id)) : []);
+            }
+          } else {
+            console.error("Failed to fetch guides:", guidesResponse.reason);
+            if (isMountedRef.current) {
+              setGuides([]);
+            }
+          }
+        } catch (err) {
+          console.error("Error processing guides response:", err);
+          if (isMountedRef.current) {
+            setGuides([]);
+          }
         }
-      } catch (error) {
-        console.error("Failed to fetch application:", error);
+        
+        // Handle application response safely
+        try {
+          if (!isMountedRef.current) return;
+          
+          if (applicationResponse.status === 'fulfilled') {
+            const response: any = applicationResponse.value;
+            // Handle different response structures
+            const application = response?.data?.data?.application || 
+                               response?.data?.application || 
+                               (response?.data && typeof response.data === 'object' && 'application' in response.data ? response.data.application : null) ||
+                               null;
+            if (isMountedRef.current) {
+              setSelectedApplication(application);
+            }
+          } else {
+            // Application not found is not an error - some hosts might not have applications
+            console.log("No application found for host:", hostId);
+            if (isMountedRef.current) {
+              setSelectedApplication(null);
+            }
+          }
+        } catch (err) {
+          console.error("Error processing application response:", err);
+          if (isMountedRef.current) {
+            setSelectedApplication(null);
+          }
+        }
+      } catch (err) {
+        console.error("Error in Promise.allSettled:", err);
+        if (isMountedRef.current && isDialogOpen) {
+          setGuides([]);
+          setSelectedApplication(null);
+        }
+      }
+    } catch (err: any) {
+      console.error("Error in handleViewDetails:", err);
+      // Still show the dialog with basic host info even if fetching fails
+      if (isMountedRef.current && isDialogOpen) {
+        setGuides([]);
+        setSelectedApplication(null);
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setIsLoadingGuides(false);
       }
     }
-    
-    setSelectedApplication(application || null);
-    setIsDialogOpen(true);
   };
 
   const getHostExperiences = (hostId: string) => {
-    return allExperiences.filter(
-      (exp: any) => String(exp.host?._id ?? exp.host) === String(hostId)
-    );
+    if (!hostId || !Array.isArray(allExperiences)) {
+      return [];
+    }
+    try {
+      return allExperiences.filter(
+        (exp: any) => {
+          if (!exp) return false;
+          const expHostId = exp.host?._id ?? exp.host;
+          return String(expHostId) === String(hostId);
+        }
+      );
+    } catch (err) {
+      console.error("Error filtering host experiences:", err);
+      return [];
+    }
   };
 
   const getHostStats = (hostId: string) => {
-    const hostExperiences = getHostExperiences(hostId);
-    const totalExperiences = hostExperiences.length;
-    const totalReviews = hostExperiences.reduce(
-      (sum: number, exp: any) => sum + (exp.ratingsQuantity || 0),
-      0
-    );
-    const avgRating = hostExperiences.length > 0
-      ? hostExperiences.reduce(
-          (sum: number, exp: any) => sum + (exp.ratingsAverage || 0),
-          0
-        ) / hostExperiences.length
-      : 0;
-    const totalRevenue = hostExperiences.reduce(
-      (sum: number, exp: any) => sum + exp.price * (exp.ratingsQuantity || 0),
-      0
-    );
+    try {
+      const hostExperiences = getHostExperiences(hostId);
+      const totalExperiences = hostExperiences.length;
+      const totalReviews = hostExperiences.reduce(
+        (sum: number, exp: any) => {
+          const quantity = exp?.ratingsQuantity;
+          return sum + (typeof quantity === 'number' ? quantity : 0);
+        },
+        0
+      );
+      const avgRating = hostExperiences.length > 0
+        ? hostExperiences.reduce(
+            (sum: number, exp: any) => {
+              const avg = exp?.ratingsAverage;
+              return sum + (typeof avg === 'number' ? avg : 0);
+            },
+            0
+          ) / hostExperiences.length
+        : 0;
+      const totalRevenue = hostExperiences.reduce(
+        (sum: number, exp: any) => {
+          const price = exp?.price;
+          const quantity = exp?.ratingsQuantity;
+          const priceNum = typeof price === 'number' ? price : 0;
+          const quantityNum = typeof quantity === 'number' ? quantity : 0;
+          return sum + (priceNum * quantityNum);
+        },
+        0
+      );
 
-    return { totalExperiences, totalReviews, avgRating, totalRevenue };
+      return { totalExperiences, totalReviews, avgRating: isNaN(avgRating) ? 0 : avgRating, totalRevenue: isNaN(totalRevenue) ? 0 : totalRevenue };
+    } catch (err) {
+      console.error("Error calculating host stats:", err);
+      return { totalExperiences: 0, totalReviews: 0, avgRating: 0, totalRevenue: 0 };
+    }
   };
 
-  if (isLoading) {
+  if (authLoading || isLoading) {
     return (
       <div className="min-h-screen flex flex-col">
         <Navigation />
         <main className="flex-1 pt-16 flex items-center justify-center">
           <div className="text-center">
             <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
-            <p className="text-lg">Loading hosts...</p>
+            <p className="text-lg">{authLoading ? "Loading..." : "Loading hosts..."}</p>
           </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  // Show nothing if user is not admin (will redirect)
+  if (!user || user.role !== "admin") {
+    return null;
+  }
+
+  // Show error state if there's an error
+  if (error && hosts.length === 0) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Navigation />
+        <main className="flex-1 pt-16 flex items-center justify-center">
+          <Card className="border-2 border-destructive max-w-md">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3 text-destructive mb-4">
+                <AlertCircle className="w-6 h-6" />
+                <h3 className="text-lg font-semibold">Error Loading Hosts</h3>
+              </div>
+              <p className="text-muted-foreground mb-4">{error}</p>
+              <Button onClick={fetchData} variant="outline" className="w-full">
+                Try Again
+              </Button>
+            </CardContent>
+          </Card>
         </main>
         <Footer />
       </div>
@@ -253,7 +414,7 @@ export default function HostManagement() {
               </Card>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {hosts.map((host: any) => {
+                {hosts.filter(host => host && (host._id || host.id)).map((host: any) => {
                   const stats = getHostStats(host._id || host.id);
                   return (
                     <motion.div
@@ -297,7 +458,13 @@ export default function HostManagement() {
                                 <Calendar className="w-4 h-4" />
                                 <span>
                                   Joined:{" "}
-                                  {new Date(host.hostApplicationDate).toLocaleDateString()}
+                                  {(() => {
+                                    try {
+                                      return new Date(host.hostApplicationDate).toLocaleDateString();
+                                    } catch {
+                                      return "Invalid date";
+                                    }
+                                  })()}
                                 </span>
                               </div>
                             )}
@@ -340,31 +507,49 @@ export default function HostManagement() {
       </main>
 
       {/* Host Details Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <Dialog open={isDialogOpen} onOpenChange={(open) => {
+        setIsDialogOpen(open);
+        if (!open) {
+          // Reset state when dialog closes
+          setSelectedApplication(null);
+          setGuides([]);
+          setSelectedGuideId("");
+        }
+      }}>
         <DialogContent className="max-w-6xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-3 text-2xl">
               {selectedHost?.photo ? (
                 <img
                   src={selectedHost.photo}
-                  alt={selectedHost.name}
+                  alt={selectedHost.name || "Host"}
                   className="w-12 h-12 rounded-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                  }}
                 />
               ) : (
                 <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
                   <Users className="w-6 h-6 text-primary" />
                 </div>
               )}
-              {selectedHost?.name}
+              {selectedHost?.name || "Host Details"}
             </DialogTitle>
             <DialogDescription>
               Complete host application details, uploaded documents, and experiences
             </DialogDescription>
           </DialogHeader>
 
-          {selectedHost && (
+          {selectedHost ? (
             <div className="space-y-6">
-              {!selectedApplication && (
+              {isLoadingGuides && (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                  <span className="ml-3 text-muted-foreground">Loading host details...</span>
+                </div>
+              )}
+              
+              {!isLoadingGuides && !selectedApplication && (
                 <Card className="border-2 border-yellow-500/50 bg-yellow-500/5">
                   <CardContent className="p-6">
                     <div className="flex items-start gap-3 text-yellow-700">
@@ -374,7 +559,7 @@ export default function HostManagement() {
                         <p className="text-sm text-muted-foreground">
                           This host was approved but their application details are not accessible. 
                           This could happen if the application was created before the current system 
-                          or if the data is incomplete. You can still view their experiences below.
+                          or if the data is incomplete. You can still view their basic information and experiences below.
                         </p>
                       </div>
                     </div>
@@ -382,7 +567,7 @@ export default function HostManagement() {
                 </Card>
               )}
 
-              {selectedApplication && (
+              {!isLoadingGuides && selectedApplication && selectedApplication.personalInfo && (
                 <div className="space-y-6">
               {/* Personal Information */}
               <Card>
@@ -432,15 +617,19 @@ export default function HostManagement() {
                     </div>
                   )}
 
-                  {selectedApplication.personalInfo?.languagesSpoken && selectedApplication.personalInfo.languagesSpoken.length > 0 && (
+                  {selectedApplication.personalInfo?.languagesSpoken && 
+                   Array.isArray(selectedApplication.personalInfo.languagesSpoken) && 
+                   selectedApplication.personalInfo.languagesSpoken.length > 0 && (
                     <div className="pt-2">
                       <div className="flex items-start gap-2">
                         <Languages className="w-4 h-4 text-muted-foreground mt-0.5" />
                         <div>
                           <span className="font-medium">Languages:</span>
                           <div className="flex flex-wrap gap-1 mt-1">
-                            {selectedApplication.personalInfo.languagesSpoken.map((lang: string) => (
-                              <Badge key={lang} variant="outline">
+                            {selectedApplication.personalInfo.languagesSpoken
+                              .filter((lang: any) => lang && typeof lang === 'string')
+                              .map((lang: string, idx: number) => (
+                              <Badge key={lang || idx} variant="outline">
                                 {lang}
                               </Badge>
                             ))}
@@ -474,7 +663,143 @@ export default function HostManagement() {
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-muted-foreground" />
                         <span className="font-medium">Became Host:</span>
-                        <span className="text-sm">{new Date(selectedHost.hostApplicationDate).toLocaleDateString()}</span>
+                          <span className="text-sm">{(() => {
+                            try {
+                              return new Date(selectedHost.hostApplicationDate).toLocaleDateString();
+                            } catch {
+                              return "Invalid date";
+                            }
+                          })()}</span>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Guide Assignment */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <User className="w-5 h-5" />
+                    Assigned Guide
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {selectedHost.assignedGuide ? (
+                    <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                      <div>
+                        {typeof selectedHost.assignedGuide === 'object' ? (
+                          <>
+                            <p className="font-medium">
+                              {selectedHost.assignedGuide.name || "Unknown Guide"}
+                            </p>
+                            {selectedHost.assignedGuide.location && (
+                              <p className="text-sm text-muted-foreground">
+                                Location: {selectedHost.assignedGuide.location}
+                              </p>
+                            )}
+                            {selectedHost.assignedGuide.email && (
+                              <p className="text-sm text-muted-foreground">
+                                Email: {selectedHost.assignedGuide.email}
+                              </p>
+                            )}
+                          </>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">
+                            Guide ID: {selectedHost.assignedGuide}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No guide assigned</p>
+                  )}
+                  
+                  <div className="pt-2 border-t">
+                    <Label htmlFor="guideReassign" className="mb-2 block">Reassign Guide:</Label>
+                    {isLoadingGuides ? (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Loading guides...
+                      </div>
+                    ) : guides.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No guides available</p>
+                    ) : (
+                      <div className="flex gap-2">
+                        <Select 
+                          value={selectedGuideId || NO_GUIDE_VALUE} 
+                          onValueChange={(value) => {
+                            if (value === NO_GUIDE_VALUE) {
+                              setSelectedGuideId("");
+                            } else {
+                              setSelectedGuideId(value);
+                            }
+                          }}
+                        >
+                          <SelectTrigger id="guideReassign" className="flex-1">
+                            <SelectValue placeholder="Select a guide" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={NO_GUIDE_VALUE}>None (Remove guide)</SelectItem>
+                            {guides
+                              .filter(guide => {
+                                if (!guide) return false;
+                                const guideId = guide._id ?? guide.id;
+                                const value = typeof guideId === "string" ? guideId.trim() : guideId;
+                                return Boolean(value) && Boolean(guide.name);
+                              })
+                              .map((guide) => {
+                                const guideId = guide._id ?? guide.id;
+                                if (!guideId) return null;
+                                const value = String(guideId).trim();
+                                if (!value) return null;
+                                return (
+                                  <SelectItem key={value} value={value}>
+                                    {guide.name || "Unknown"} - {guide.location || "No location"}
+                                  </SelectItem>
+                                );
+                              })}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          onClick={async () => {
+                            try {
+                              setIsReassigning(true);
+                              const hostId = selectedHost._id || selectedHost.id;
+                              if (selectedGuideId) {
+                                await guidesAPI.reassignToHost(hostId, selectedGuideId);
+                                toast({
+                                  title: "Guide Reassigned",
+                                  description: "Host has been reassigned to the selected guide.",
+                                });
+                              } else {
+                                // Remove guide assignment
+                                await guidesAPI.reassignToHost(hostId, "");
+                                toast({
+                                  title: "Guide Removed",
+                                  description: "Guide assignment has been removed.",
+                                });
+                              }
+                              fetchData();
+                              setIsDialogOpen(false);
+                            } catch (err: any) {
+                              toast({
+                                title: "Error",
+                                description: err.response?.data?.message || "Failed to reassign guide",
+                                variant: "destructive",
+                              });
+                            } finally {
+                              setIsReassigning(false);
+                            }
+                          }}
+                          disabled={isReassigning}
+                          size="sm"
+                        >
+                          {isReassigning ? (
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          ) : null}
+                          {selectedGuideId ? "Reassign" : "Remove Guide"}
+                        </Button>
                       </div>
                     )}
                   </div>
@@ -482,7 +807,8 @@ export default function HostManagement() {
               </Card>
 
               {/* Experience Details */}
-              {(selectedApplication.experienceDetails?.experienceTypes?.length > 0 || 
+              {selectedApplication?.experienceDetails && 
+               (selectedApplication.experienceDetails?.experienceTypes?.length > 0 || 
                 selectedApplication.experienceDetails?.specialties?.length > 0 || 
                 selectedApplication.experienceDetails?.previousExperience) && (
                 <Card>
@@ -493,12 +819,15 @@ export default function HostManagement() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    {selectedApplication.experienceDetails.experienceTypes && selectedApplication.experienceDetails.experienceTypes.length > 0 && (
+                    {Array.isArray(selectedApplication.experienceDetails.experienceTypes) && 
+                     selectedApplication.experienceDetails.experienceTypes.length > 0 && (
                       <div>
                         <span className="font-medium">Experience Types:</span>
                         <div className="flex flex-wrap gap-1 mt-1">
-                          {selectedApplication.experienceDetails.experienceTypes.map((type: string) => (
-                            <Badge key={type} className="bg-primary">
+                          {selectedApplication.experienceDetails.experienceTypes
+                            .filter((type: any) => type && typeof type === 'string')
+                            .map((type: string, idx: number) => (
+                            <Badge key={type || idx} className="bg-primary">
                               {type}
                             </Badge>
                           ))}
@@ -506,12 +835,15 @@ export default function HostManagement() {
                       </div>
                     )}
                     
-                    {selectedApplication.experienceDetails.specialties && selectedApplication.experienceDetails.specialties.length > 0 && (
+                    {Array.isArray(selectedApplication.experienceDetails.specialties) && 
+                     selectedApplication.experienceDetails.specialties.length > 0 && (
                       <div>
                         <span className="font-medium">Specialties:</span>
                         <div className="flex flex-wrap gap-1 mt-1">
-                          {selectedApplication.experienceDetails.specialties.map((specialty: string) => (
-                            <Badge key={specialty} variant="secondary">
+                          {selectedApplication.experienceDetails.specialties
+                            .filter((specialty: any) => specialty && typeof specialty === 'string')
+                            .map((specialty: string, idx: number) => (
+                            <Badge key={specialty || idx} variant="secondary">
                               {specialty}
                             </Badge>
                           ))}
@@ -532,7 +864,7 @@ export default function HostManagement() {
               )}
 
               {/* Uploaded Documents & Images */}
-              {selectedApplication.media && (
+              {selectedApplication?.media && (
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-lg flex items-center gap-2">
@@ -552,6 +884,9 @@ export default function HostManagement() {
                               src={selectedApplication.media.nationalIdFront}
                               alt="National ID Front"
                               className="w-full h-48 object-cover rounded-lg border-2"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
                             />
                           </div>
                         )}
@@ -562,6 +897,9 @@ export default function HostManagement() {
                               src={selectedApplication.media.nationalIdBack}
                               alt="National ID Back"
                               className="w-full h-48 object-cover rounded-lg border-2"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
                             />
                           </div>
                         )}
@@ -576,22 +914,31 @@ export default function HostManagement() {
                           src={selectedApplication.media.personalPhoto}
                           alt="Personal Photo"
                           className="w-64 h-64 object-cover rounded-lg border-2"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                          }}
                         />
                       </div>
                     )}
 
                     {/* Hosting Environment Photos */}
-                    {selectedApplication.media.hostingEnvironmentPhotos && selectedApplication.media.hostingEnvironmentPhotos.length > 0 && (
+                    {Array.isArray(selectedApplication.media.hostingEnvironmentPhotos) && 
+                     selectedApplication.media.hostingEnvironmentPhotos.length > 0 && (
                       <div>
                         <h4 className="font-medium mb-2">Hosting Environment Photos ({selectedApplication.media.hostingEnvironmentPhotos.length})</h4>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                          {selectedApplication.media.hostingEnvironmentPhotos.map((photo: string, index: number) => (
+                          {selectedApplication.media.hostingEnvironmentPhotos
+                            .filter((photo: any) => photo && typeof photo === 'string')
+                            .map((photo: string, index: number) => (
                             <img
                               key={index}
                               src={photo}
                               alt={`Hosting Environment ${index + 1}`}
                               className="w-full h-48 object-cover rounded-lg border-2 hover:scale-105 transition-transform cursor-pointer"
                               onClick={() => window.open(photo, '_blank')}
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
                             />
                           ))}
                         </div>
@@ -601,7 +948,7 @@ export default function HostManagement() {
                 </Card>
               )}
 
-              {/* Host Statistics */}
+              {/* Host Statistics - Always show */}
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">Statistics</CardTitle>
@@ -609,45 +956,50 @@ export default function HostManagement() {
                 <CardContent>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     {(() => {
-                      const stats = getHostStats(selectedHost._id || selectedHost.id);
-                      return (
-                        <>
-                          <div className="text-center p-3 bg-muted/50 rounded-lg">
-                            <MapPin className="w-6 h-6 text-primary mx-auto mb-2" />
-                            <p className="text-2xl font-bold text-primary">
-                              {stats.totalExperiences}
-                            </p>
-                            <p className="text-xs text-muted-foreground">Experiences</p>
-                          </div>
-                          <div className="text-center p-3 bg-muted/50 rounded-lg">
-                            <MessageSquare className="w-6 h-6 text-primary mx-auto mb-2" />
-                            <p className="text-2xl font-bold text-primary">
-                              {stats.totalReviews}
-                            </p>
-                            <p className="text-xs text-muted-foreground">Reviews</p>
-                          </div>
-                          <div className="text-center p-3 bg-muted/50 rounded-lg">
-                            <Star className="w-6 h-6 text-secondary mx-auto mb-2 fill-secondary" />
-                            <p className="text-2xl font-bold text-primary">
-                              {stats.avgRating.toFixed(1)}
-                            </p>
-                            <p className="text-xs text-muted-foreground">Avg Rating</p>
-                          </div>
-                          <div className="text-center p-3 bg-muted/50 rounded-lg">
-                            <DollarSign className="w-6 h-6 text-green-600 mx-auto mb-2" />
-                            <p className="text-2xl font-bold text-green-600">
-                              {stats.totalRevenue.toLocaleString()}
-                            </p>
-                            <p className="text-xs text-muted-foreground">Revenue (ETB)</p>
-                          </div>
-                        </>
-                      );
+                      try {
+                        const stats = getHostStats(selectedHost._id || selectedHost.id);
+                        return (
+                          <>
+                            <div className="text-center p-3 bg-muted/50 rounded-lg">
+                              <MapPin className="w-6 h-6 text-primary mx-auto mb-2" />
+                              <p className="text-2xl font-bold text-primary">
+                                {stats.totalExperiences}
+                              </p>
+                              <p className="text-xs text-muted-foreground">Experiences</p>
+                            </div>
+                            <div className="text-center p-3 bg-muted/50 rounded-lg">
+                              <MessageSquare className="w-6 h-6 text-primary mx-auto mb-2" />
+                              <p className="text-2xl font-bold text-primary">
+                                {stats.totalReviews}
+                              </p>
+                              <p className="text-xs text-muted-foreground">Reviews</p>
+                            </div>
+                            <div className="text-center p-3 bg-muted/50 rounded-lg">
+                              <Star className="w-6 h-6 text-secondary mx-auto mb-2 fill-secondary" />
+                              <p className="text-2xl font-bold text-primary">
+                                {stats.avgRating.toFixed(1)}
+                              </p>
+                              <p className="text-xs text-muted-foreground">Avg Rating</p>
+                            </div>
+                            <div className="text-center p-3 bg-muted/50 rounded-lg">
+                              <DollarSign className="w-6 h-6 text-green-600 mx-auto mb-2" />
+                              <p className="text-2xl font-bold text-green-600">
+                                {stats.totalRevenue.toLocaleString()}
+                              </p>
+                              <p className="text-xs text-muted-foreground">Revenue (ETB)</p>
+                            </div>
+                          </>
+                        );
+                      } catch (err) {
+                        console.error("Error calculating stats:", err);
+                        return <p className="text-muted-foreground">Error loading statistics</p>;
+                      }
                     })()}
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Host Experiences */}
+              {/* Host Experiences - Always show */}
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center gap-2">
@@ -657,69 +1009,77 @@ export default function HostManagement() {
                 </CardHeader>
                 <CardContent>
                   {(() => {
-                    const hostExperiences = getHostExperiences(
-                      selectedHost._id || selectedHost.id
-                    );
-                    return hostExperiences.length === 0 ? (
-                      <p className="text-center text-muted-foreground py-8">
-                        No experiences created yet
-                      </p>
-                    ) : (
-                      <div className="space-y-3">
-                        {hostExperiences.map((exp: any) => (
-                          <div
-                            key={exp._id || exp.id}
-                            className="flex items-center justify-between p-3 border rounded-lg hover:border-primary/50 transition-colors"
-                          >
-                            <div className="flex-1">
-                              <p className="font-semibold">{exp.title}</p>
-                              <p className="text-sm text-muted-foreground">
-                                {exp.location}
-                              </p>
-                              <div className="flex items-center gap-3 mt-1">
-                                <span className="text-sm font-medium text-primary">
-                                  ETB {exp.price}
-                                </span>
-                                <div className="flex items-center gap-1">
-                                  <Star className="w-3 h-3 text-secondary fill-secondary" />
-                                  <span className="text-sm">
-                                    {exp.ratingsAverage?.toFixed(1) || "0.0"}
-                                  </span>
-                                  <span className="text-xs text-muted-foreground">
-                                    ({exp.ratingsQuantity || 0})
-                                  </span>
-                                </div>
-                                <Badge
-                                  variant={
-                                    exp.status === "approved"
-                                      ? "default"
-                                      : exp.status === "pending"
-                                      ? "secondary"
-                                      : "destructive"
-                                  }
-                                >
-                                  {exp.status}
-                                </Badge>
-                              </div>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                navigate(`/experiences/${exp._id || exp.id}`);
-                                setIsDialogOpen(false);
-                              }}
+                    try {
+                      const hostExperiences = getHostExperiences(
+                        selectedHost._id || selectedHost.id
+                      );
+                      return hostExperiences.length === 0 ? (
+                        <p className="text-center text-muted-foreground py-8">
+                          No experiences created yet
+                        </p>
+                      ) : (
+                        <div className="space-y-3">
+                          {hostExperiences.filter(exp => exp && (exp._id || exp.id)).map((exp: any) => (
+                            <div
+                              key={exp._id || exp.id}
+                              className="flex items-center justify-between p-3 border rounded-lg hover:border-primary/50 transition-colors"
                             >
-                              <Eye className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    );
+                              <div className="flex-1">
+                                <p className="font-semibold">{exp.title || "Untitled Experience"}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {exp.location || "No location"}
+                                </p>
+                                <div className="flex items-center gap-3 mt-1">
+                                  <span className="text-sm font-medium text-primary">
+                                    ETB {exp.price || 0}
+                                  </span>
+                                  <div className="flex items-center gap-1">
+                                    <Star className="w-3 h-3 text-secondary fill-secondary" />
+                                    <span className="text-sm">
+                                      {exp.ratingsAverage?.toFixed(1) || "0.0"}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                      ({exp.ratingsQuantity || 0})
+                                    </span>
+                                  </div>
+                                  <Badge
+                                    variant={
+                                      exp.status === "approved"
+                                        ? "default"
+                                        : exp.status === "pending"
+                                        ? "secondary"
+                                        : "destructive"
+                                    }
+                                  >
+                                    {exp.status || "unknown"}
+                                  </Badge>
+                                </div>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  const expId = exp._id || exp.id;
+                                  if (expId) {
+                                    navigate(`/experiences/${expId}`);
+                                    setIsDialogOpen(false);
+                                  }
+                                }}
+                              >
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    } catch (err) {
+                      console.error("Error loading experiences:", err);
+                      return <p className="text-center text-muted-foreground py-8">Error loading experiences</p>;
+                    }
                   })()}
                 </CardContent>
               </Card>
-                </div>
+              </div>
               )}
 
               {/* Basic Host Info (always shown) */}
@@ -741,19 +1101,36 @@ export default function HostManagement() {
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-muted-foreground" />
                         <span className="font-medium">Member Since:</span>
-                        <span className="text-sm">{new Date(selectedHost.createdAt || Date.now()).toLocaleDateString()}</span>
+                        <span className="text-sm">{(() => {
+                          try {
+                            return new Date(selectedHost.createdAt || Date.now()).toLocaleDateString();
+                          } catch {
+                            return "Invalid date";
+                          }
+                        })()}</span>
                       </div>
                       {selectedHost.hostApplicationDate && (
                         <div className="flex items-center gap-2">
                           <Calendar className="w-4 h-4 text-muted-foreground" />
                           <span className="font-medium">Became Host:</span>
-                          <span className="text-sm">{new Date(selectedHost.hostApplicationDate).toLocaleDateString()}</span>
+                          <span className="text-sm">{(() => {
+                            try {
+                              return new Date(selectedHost.hostApplicationDate).toLocaleDateString();
+                            } catch {
+                              return "Invalid date";
+                            }
+                          })()}</span>
                         </div>
                       )}
                     </div>
                   </CardContent>
                 </Card>
               )}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center py-8">
+              <AlertCircle className="w-8 h-8 text-destructive" />
+              <span className="ml-3 text-muted-foreground">No host selected</span>
             </div>
           )}
         </DialogContent>

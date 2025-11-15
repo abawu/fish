@@ -184,12 +184,86 @@ export const hostApplicationAPI = {
     const response = await api.get("/host-applications/pending");
     return response.data;
   },
-  approveApplication: async (id: string) => {
-    const response = await api.patch(`/host-applications/${id}/approve`);
+  approveApplication: async (id: string, guideId?: string) => {
+    const response = await api.patch(`/host-applications/${id}/approve`, { guideId });
     return response.data;
   },
   rejectApplication: async (id: string, rejectionReason?: string) => {
     const response = await api.patch(`/host-applications/${id}/reject`, { rejectionReason });
+    return response.data;
+  },
+};
+
+// Guide Application API
+export const guideApplicationAPI = {
+  createOrUpdate: async (personalInfo: any) => {
+    const response = await api.post("/guide-applications", { personalInfo });
+    return response.data;
+  },
+  updateExperienceDetails: async (experienceDetails: any) => {
+    const response = await api.patch("/guide-applications/experience-details", { experienceDetails });
+    return response.data;
+  },
+  updateMedia: async (media: any) => {
+    const response = await api.patch("/guide-applications/media", { media });
+    return response.data;
+  },
+  uploadMedia: async (formData: FormData) => {
+    const response = await api.post("/guide-applications/upload-media", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+    return response.data;
+  },
+  submitApplication: async () => {
+    const response = await api.post("/guide-applications/submit");
+    return response.data;
+  },
+  reapplyApplication: async () => {
+    const response = await api.post("/guide-applications/reapply");
+    return response.data;
+  },
+  getMyApplication: async () => {
+    const response = await api.get("/guide-applications/my-application");
+    return response.data;
+  },
+  // Admin only
+  getPendingApplications: async () => {
+    const response = await api.get("/guide-applications/pending");
+    return response.data;
+  },
+  approveApplication: async (id: string) => {
+    const response = await api.patch(`/guide-applications/${id}/approve`);
+    return response.data;
+  },
+  rejectApplication: async (id: string, rejectionReason?: string) => {
+    const response = await api.patch(`/guide-applications/${id}/reject`, { rejectionReason });
+    return response.data;
+  },
+};
+
+// Guides API
+export const guidesAPI = {
+  getAll: async (location?: string) => {
+    const params = new URLSearchParams();
+    if (location) {
+      params.append("location", location);
+    }
+    const url = params.toString() ? `/users/guides?${params.toString()}` : "/users/guides";
+    const response = await api.get(url);
+    return response.data;
+  },
+  getAssignedHosts: async (guideId: string) => {
+    const response = await api.get(`/users/guides/${guideId}/hosts`);
+    return response.data;
+  },
+  assignToHost: async (hostId: string, guideId: string) => {
+    const response = await api.patch(`/users/hosts/${hostId}/assign-guide`, { guideId });
+    return response.data;
+  },
+  reassignToHost: async (hostId: string, guideId: string) => {
+    const response = await api.patch(`/users/hosts/${hostId}/reassign-guide`, { guideId });
     return response.data;
   },
 };

@@ -32,9 +32,14 @@ const Navigation = () => {
             <Link to="/contact" className="text-foreground hover:text-primary transition-colors font-medium">
               Contact
             </Link>
-            {isAuthenticated && user?.role === 'admin' && (
+            {isAuthenticated && user?.role === "admin" && (
               <Link to="/admin/payouts" className="text-foreground hover:text-primary transition-colors font-medium">
                 Payouts
+              </Link>
+            )}
+            {isAuthenticated && user?.guideStatus === 'approved' && (
+              <Link to="/guide/dashboard" className="text-foreground hover:text-primary transition-colors font-medium">
+                Guide Dashboard
               </Link>
             )}
             {isAuthenticated ? (
@@ -98,13 +103,22 @@ const Navigation = () => {
               >
                 Contact
               </Link>
-              {isAuthenticated && user?.role === 'admin' && (
+              {isAuthenticated && user?.role === "admin" && (
                 <Link 
                   to="/admin/payouts" 
                   className="text-foreground hover:text-primary transition-colors font-medium"
                   onClick={() => setIsMenuOpen(false)}
                 >
                   Payouts
+                </Link>
+              )}
+              {isAuthenticated && user?.guideStatus === 'approved' && (
+                <Link 
+                  to="/guide/dashboard" 
+                  className="text-foreground hover:text-primary transition-colors font-medium"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Guide Dashboard
                 </Link>
               )}
               {isAuthenticated ? (
