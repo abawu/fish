@@ -25,6 +25,40 @@ export const API_BASE_URL = getBackendURL();
 // API origin (used for static asset URLs returned by the backend, e.g. /img/...)
 export const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
 
+export type BookingStatus = "upcoming" | "completed" | "expired" | "active";
+
+export interface ExperienceSummary {
+  _id?: string;
+  title?: string;
+  location?: string;
+  nextOccurrenceAt?: string;
+  expirationWindowHours?: number;
+}
+
+export interface BookingRecord {
+  _id?: string;
+  id?: string;
+  experience?: ExperienceSummary | string | null;
+  tour?: { name?: string } | string | null;
+  price?: number;
+  quantity?: number;
+  txRef?: string;
+  paid?: boolean;
+  status?: BookingStatus;
+  experienceDate?: string;
+  expiresAt?: string;
+  expirationWindowHours?: number;
+  createdAt?: string;
+  completedAt?: string;
+}
+
+export interface BookingListResponse {
+  status: string;
+  results: number;
+  data: BookingRecord[];
+  totalEarnings?: number;
+}
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -473,21 +507,32 @@ export const bookingsAPI = {
     // Placeholder - would need backend booking endpoints
     throw new Error("Booking functionality not yet implemented in backend");
   },
-  create: async (experienceId: string, qty?: number) => {
-    const response = await api.get(`/bookings/checkout-session/${experienceId}`, { params: qty ? { qty } : {} });
+  create: async (experienceId: string, qty?: number, requiresGuide?: boolean) => {
+    const params: { qty?: number; requiresGuide?: string } = {};
+    if (qty != null && qty > 0) {
+      params.qty = qty;
+    }
+    if (requiresGuide === true) {
+      params.requiresGuide = 'true';
+    }
+    const response = await api.get(`/bookings/checkout-session/${experienceId}`, { params });
     return response.data;
   },
   verify: async (txRef: string) => {
     const response = await api.get(`/bookings/verify/${txRef}`);
     return response.data;
   },
-  getMyBookings: async () => {
+  getMyBookings: async (): Promise<BookingListResponse> => {
     const response = await api.get("/bookings/me");
-    return response.data;
+    return response.data as BookingListResponse;
   },
-  getHostBookings: async () => {
+  getHostBookings: async (): Promise<BookingListResponse> => {
     const response = await api.get("/bookings/host/bookings");
-    return response.data;
+    return response.data as BookingListResponse;
+  },
+  getGuideBookings: async (): Promise<BookingListResponse> => {
+    const response = await api.get("/bookings/guide/bookings");
+    return response.data as BookingListResponse;
   },
   getAvailability: async (experienceId: string) => {
     const response = await api.get(`/bookings/availability/${experienceId}`);

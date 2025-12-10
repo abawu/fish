@@ -68,6 +68,8 @@ const TourManagement = () => {
     location: "",
     imageCover: "",
     images: "",
+    nextOccurrenceAt: "",
+    expirationWindowHours: "24",
   });
 
   useEffect(() => {
@@ -123,12 +125,17 @@ const TourManagement = () => {
       location: "",
       imageCover: "",
       images: "",
+      nextOccurrenceAt: "",
+      expirationWindowHours: "24",
     });
     setShowForm(true);
   };
 
   const handleEdit = (experience: any) => {
     setEditingExperience(experience);
+    const nextOccurrence = experience.nextOccurrenceAt
+      ? new Date(experience.nextOccurrenceAt).toISOString().slice(0, 16)
+      : "";
     setFormData({
       title: experience.title || "",
       description: experience.description || "",
@@ -139,6 +146,8 @@ const TourManagement = () => {
       location: experience.location || "",
       imageCover: experience.imageCover || "",
       images: experience.images?.join(", ") || "",
+      nextOccurrenceAt: nextOccurrence,
+      expirationWindowHours: experience.expirationWindowHours?.toString() || "24",
     });
     setShowForm(true);
   };
@@ -166,7 +175,7 @@ const TourManagement = () => {
 
     setSubmitting(true);
     try {
-      const experienceData = {
+      const experienceData: any = {
         title: formData.title,
         description: formData.description,
         summary: formData.summary,
@@ -182,6 +191,17 @@ const TourManagement = () => {
               .filter((img) => img)
           : [],
       };
+
+      // Add scheduling fields if provided
+      if (formData.nextOccurrenceAt) {
+        experienceData.nextOccurrenceAt = new Date(formData.nextOccurrenceAt).toISOString();
+      }
+      if (formData.expirationWindowHours) {
+        const hours = parseInt(formData.expirationWindowHours);
+        if (!Number.isNaN(hours) && hours >= 0) {
+          experienceData.expirationWindowHours = hours;
+        }
+      }
 
       if (editingExperience) {
         await experiencesAPI.update(editingExperience._id || editingExperience.id, experienceData);
@@ -477,6 +497,50 @@ const TourManagement = () => {
                         </div>
                       </div>
 
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <Label htmlFor="nextOccurrenceAt">
+                            Next Occurrence Date & Time
+                          </Label>
+                          <Input
+                            id="nextOccurrenceAt"
+                            type="datetime-local"
+                            value={formData.nextOccurrenceAt}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                nextOccurrenceAt: e.target.value,
+                              })
+                            }
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            When this experience will next occur. Bookings will use this date.
+                          </p>
+                        </div>
+                        <div>
+                          <Label htmlFor="expirationWindowHours">
+                            Expiration Window (hours)
+                          </Label>
+                          <Input
+                            id="expirationWindowHours"
+                            type="number"
+                            min="0"
+                            max="336"
+                            value={formData.expirationWindowHours}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                expirationWindowHours: e.target.value,
+                              })
+                            }
+                            placeholder="24"
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Hours after the experience date that bookings remain valid (0-336, default: 24).
+                          </p>
+                        </div>
+                      </div>
+
                       <div className="flex gap-4">
                         <Button
                           type="submit"
@@ -589,6 +653,26 @@ const TourManagement = () => {
                           </span>
                           <span className="text-right">{experience.location}</span>
                         </div>
+                        {experience.nextOccurrenceAt && (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">
+                              Next Occurrence:
+                            </span>
+                            <span className="text-right">
+                              {new Date(experience.nextOccurrenceAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                        )}
+                        {experience.expirationWindowHours && (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">
+                              Expiration Window:
+                            </span>
+                            <span className="text-right">
+                              {experience.expirationWindowHours} hours
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </CardContent>
                   </Card>

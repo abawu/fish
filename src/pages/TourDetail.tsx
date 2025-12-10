@@ -27,6 +27,7 @@ import {
   Check,
   Plus,
   Minus,
+  UserCheck,
 } from "lucide-react";
 import { experiencesAPI, reviewsAPI, bookingsAPI, API_ORIGIN } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
@@ -50,6 +51,9 @@ const TourDetail = () => {
   const [totalReviews, setTotalReviews] = useState(0);
   const [numGuests, setNumGuests] = useState<number>(1);
   const [availability, setAvailability] = useState<{available: number; booked: number; maxGuests: number} | null>(null);
+  const [requiresGuide, setRequiresGuide] = useState<boolean>(false);
+  const [guideCost, setGuideCost] = useState<number>(0);
+  const [assignedGuide, setAssignedGuide] = useState<any | null>(null);
   const [newReview, setNewReview] = useState("");
   const [newRating, setNewRating] = useState(0);
   const [submittingReview, setSubmittingReview] = useState(false);
@@ -67,6 +71,13 @@ const TourDetail = () => {
           const t = response.data.data;
           setExperience(t);
           setSelectedStartDate(null);
+          
+          // Debug: Log the experience data to see guide structure
+          if (process.env.NODE_ENV !== 'production') {
+            console.log('Fetched experience:', t);
+            console.log('Host:', t?.host);
+            console.log('Assigned guide:', t?.host?.assignedGuide);
+          }
         } catch (err: unknown) {
           console.error("Failed to fetch experience:", err);
           toast({
@@ -197,6 +208,77 @@ const TourDetail = () => {
     };
     loadAvailability();
   }, [id]);
+
+  // Get assigned guide from experience host
+  useEffect(() => {
+    if (!experience) {
+      setAssignedGuide(null);
+      setGuideCost(0);
+      return;
+    }
+    
+    // Get assigned guide from host
+    const host = experience.host;
+    const guide = host?.assignedGuide;
+    
+    // Debug logging
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('Experience host:', host);
+      console.log('Assigned guide:', guide);
+    }
+    
+    // Set guide if it exists (even if paymentPerHour is not set yet)
+    if (guide) {
+      // Check if guide is an object or just an ID
+      if (typeof guide === 'object' && guide !== null) {
+        setAssignedGuide(guide);
+      } else if (typeof guide === 'string') {
+        // Guide is just an ID, we need to fetch it or wait for it to be populated
+        // For now, set to null and let the backend handle it
+        setAssignedGuide(null);
+      }
+    } else {
+      setAssignedGuide(null);
+    }
+  }, [experience]);
+
+  // Calculate guide cost when guide is requested
+  useEffect(() => {
+    if (!requiresGuide || !assignedGuide || !experience?.duration) {
+      setGuideCost(0);
+      return;
+    }
+
+    // Parse duration to hours
+    const durationStr = experience.duration.toLowerCase();
+    const hourMatch = durationStr.match(/(\d+\.?\d*)\s*(?:hours?|hrs?|h)\b/i);
+    const minuteMatch = durationStr.match(/(\d+\.?\d*)\s*(?:minutes?|mins?|m)\b/i);
+    const dayMatch = durationStr.match(/(\d+\.?\d*)\s*(?:days?|d)\b/i);
+    
+    let hours = 0;
+    if (hourMatch) {
+      hours = parseFloat(hourMatch[1]);
+    } else if (minuteMatch) {
+      hours = parseFloat(minuteMatch[1]) / 60;
+    } else if (dayMatch) {
+      hours = parseFloat(dayMatch[1]) * 24;
+    } else {
+      // Try to extract any number and assume hours
+      const numMatch = durationStr.match(/(\d+\.?\d*)/);
+      if (numMatch) {
+        hours = parseFloat(numMatch[1]);
+      }
+    }
+    
+    const paymentPerHour = Number(assignedGuide.paymentPerHour) || 0;
+    
+    if (hours > 0 && paymentPerHour > 0) {
+      const cost = Math.round(hours * paymentPerHour * 100) / 100;
+      setGuideCost(cost);
+    } else {
+      setGuideCost(0);
+    }
+  }, [requiresGuide, assignedGuide, experience?.duration]);
 
   if (isLoading) {
     return (
@@ -405,6 +487,24 @@ const TourDetail = () => {
                           </p>
                         </div>
                       </div>
+                      {experience.nextOccurrenceAt && (
+                        <div className="flex items-start gap-3 col-span-2">
+                          <Calendar className="w-6 h-6 text-primary mt-1" />
+                          <div>
+                            <p className="font-semibold text-foreground mb-1">
+                              Next Occurrence
+                            </p>
+                            <p className="text-muted-foreground">
+                              {new Date(experience.nextOccurrenceAt).toLocaleString()}
+                            </p>
+                            {experience.expirationWindowHours && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Bookings expire {experience.expirationWindowHours} hours after the experience date
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -626,6 +726,138 @@ const TourDetail = () => {
                       )}
                     </div>
 
+                    {/* Guide Selection */}
+                    <div className="mb-6">
+                      <div className="flex items-center justify-between mb-3">
+                        <label className="text-sm font-medium">Need a Guide?</label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRequiresGuide(!requiresGuide);
+                          }}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                            requiresGuide ? 'bg-primary' : 'bg-muted'
+                          } cursor-pointer`}
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                              requiresGuide ? 'translate-x-6' : 'translate-x-1'
+                            }`}
+                          />
+                        </button>
+                      </div>
+                      
+                      {requiresGuide && (
+                        <div className="mt-3 space-y-3">
+                          {assignedGuide ? (
+                            <div className="p-4 bg-primary/5 rounded-md border border-primary/20">
+                              <div className="flex items-start gap-3 mb-3">
+                                {assignedGuide.photo ? (
+                                  <Avatar className="w-10 h-10">
+                                    <AvatarImage
+                                      src={
+                                        String(assignedGuide.photo).startsWith('/')
+                                          ? `${API_ORIGIN}${assignedGuide.photo}`
+                                          : assignedGuide.photo
+                                      }
+                                      alt={assignedGuide.name || 'Guide'}
+                                    />
+                                    <AvatarFallback className="bg-primary/10 text-primary font-semibold text-xs">
+                                      {(() => {
+                                        const name = assignedGuide.name || 'Guide';
+                                        const parts = name.trim().split(/\s+/);
+                                        if (parts.length >= 2) {
+                                          return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+                                        }
+                                        return name.substring(0, 2).toUpperCase();
+                                      })()}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                ) : (
+                                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-xs">
+                                    {(() => {
+                                      const name = assignedGuide.name || 'Guide';
+                                      const parts = name.trim().split(/\s+/);
+                                      if (parts.length >= 2) {
+                                        return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+                                      }
+                                      return name.substring(0, 2).toUpperCase();
+                                    })()}
+                                  </div>
+                                )}
+                                <div className="flex-1">
+                                  <div className="font-semibold text-sm">{assignedGuide.name || 'Professional Guide'}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {assignedGuide.location || 'Professional Guide'}
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              <div className="pt-3 border-t border-primary/20">
+                                {assignedGuide.paymentPerHour ? (
+                                  <>
+                                    <div className="flex items-center justify-between text-sm mb-2">
+                                      <span className="text-muted-foreground">Payment Rate:</span>
+                                      <span className="font-semibold text-primary">ETB {assignedGuide.paymentPerHour}/hour</span>
+                                    </div>
+                                    {guideCost > 0 ? (
+                                      <>
+                                        <div className="flex items-center justify-between text-sm mb-1">
+                                          <span className="text-muted-foreground">Experience Duration:</span>
+                                          <span className="font-medium">{experience.duration}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between text-sm mb-1 pt-2 border-t border-primary/10">
+                                          <span className="text-muted-foreground">Guide Service Cost:</span>
+                                          <span className="font-bold text-lg text-primary">ETB {guideCost.toFixed(2)}</span>
+                                        </div>
+                                        <div className="text-xs text-muted-foreground mt-1">
+                                          Calculation: {experience.duration} × ETB {assignedGuide.paymentPerHour}/hour = ETB {guideCost.toFixed(2)}
+                                        </div>
+                                      </>
+                                    ) : (
+                                      <div className="text-xs text-muted-foreground mt-1">
+                                        Cost will be calculated based on experience duration
+                                      </div>
+                                    )}
+                                  </>
+                                ) : (
+                                  <div className="text-xs text-muted-foreground">
+                                    Guide payment rate not set. Please contact support.
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="p-4 bg-muted/50 rounded-md border border-muted text-sm text-muted-foreground">
+                              Loading guide information...
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Total Price Display */}
+                    <div className="mb-6 p-4 bg-muted/30 rounded-lg border">
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Experience ({numGuests} {numGuests === 1 ? 'guest' : 'guests'}):</span>
+                          <span className="font-medium">ETB {Number(experience.price) * numGuests}</span>
+                        </div>
+                        {requiresGuide && guideCost > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Guide Service:</span>
+                            <span className="font-medium">ETB {guideCost}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between pt-2 border-t border-border">
+                          <span className="font-semibold">Total:</span>
+                          <span className="font-bold text-lg text-primary">
+                            ETB {Number(experience.price) * numGuests + guideCost}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
                     {/* Host */}
                     {experience.host && (
                       <div className="mb-6">
@@ -708,7 +940,11 @@ const TourDetail = () => {
                         variant="hero"
                         size="xl"
                         className="w-full mb-3"
-                        disabled={((availability?.available ?? 1) < 1) || (numGuests > (availability?.available ?? (Number(experience.maxGuests) || 1)))}
+                        disabled={
+                          ((availability?.available ?? 1) < 1) || 
+                          (numGuests > (availability?.available ?? (Number(experience.maxGuests) || 1))) ||
+                          (requiresGuide && !assignedGuide)
+                        }
                         onClick={async () => {
                           if (!isAuthenticated) {
                             toast({
@@ -720,13 +956,16 @@ const TourDetail = () => {
                             return;
                           }
 
+                          // Note: All experiences have assigned guides, so we proceed with booking
+                          // The backend will handle validation if guide is not available
+
                           try {
                             toast({
                               title: "Redirecting to payment...",
                               description:
                                 "You will be redirected to complete payment",
                             });
-                            const resp = await bookingsAPI.create(id as string, numGuests);
+                            const resp = await bookingsAPI.create(id as string, numGuests, requiresGuide);
                             const checkoutUrl =
                               resp.checkout_url || resp.data?.checkout_url;
                             if (checkoutUrl) {
@@ -740,12 +979,50 @@ const TourDetail = () => {
                             }
                           } catch (err: any) {
                             console.error("Booking init failed:", err);
+                            let errorMessage = "Failed to initiate booking";
+                            
+                            if (err.response) {
+                              // Server responded with error
+                              const responseData = err.response.data;
+                              
+                              // Log full error for debugging
+                              console.error("Full error response:", JSON.stringify({
+                                status: err.response.status,
+                                statusText: err.response.statusText,
+                                data: responseData,
+                                dataType: typeof responseData,
+                                dataKeys: responseData ? Object.keys(responseData) : []
+                              }, null, 2));
+                              
+                              // Try multiple ways to extract error message (production vs development format)
+                              errorMessage = 
+                                (responseData && typeof responseData === 'object' && responseData.message) ||
+                                (responseData && typeof responseData === 'object' && responseData.error?.message) ||
+                                (responseData && typeof responseData === 'object' && responseData.error) ||
+                                (responseData && typeof responseData === 'string' ? responseData : null) ||
+                                (responseData?.status === 'failed' ? responseData?.message : null) ||
+                                (responseData?.status === 'error' ? responseData?.message : null) ||
+                                `Request failed with status ${err.response.status}`;
+                              
+                              // Log the extracted error message
+                              console.error("Extracted error message:", errorMessage);
+                              
+                              // If we still don't have a message, log the raw data
+                              if (!errorMessage || errorMessage.includes('Request failed')) {
+                                console.error("Could not extract error message. Raw response data:", responseData);
+                              }
+                            } else if (err.request) {
+                              // Request made but no response
+                              errorMessage = "No response from server. Please check your connection.";
+                              console.error("No response received:", err.request);
+                            } else {
+                              // Error setting up request
+                              errorMessage = err.message || errorMessage;
+                            }
+                            
                             toast({
-                              title: "Error",
-                              description:
-                                err.response?.data?.message ||
-                                err.message ||
-                                "Failed to initiate booking",
+                              title: "Booking Error",
+                              description: errorMessage,
                               variant: "destructive",
                             });
                           }

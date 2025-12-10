@@ -1,6 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Star } from "lucide-react";
+import { Star, Calendar } from "lucide-react";
 import { Link } from "react-router-dom";
 import { API_ORIGIN, bookingsAPI } from "@/lib/api";
 import { motion } from "framer-motion";
@@ -18,6 +18,8 @@ interface TourCardProps {
     price: number;
     summary: string;
     imageCover: string;
+    nextOccurrenceAt?: string;
+    expirationWindowHours?: number;
   };
 }
 
@@ -97,6 +99,20 @@ const TourCard = ({ tour }: TourCardProps) => {
             <p className="text-muted-foreground text-sm line-clamp-2 mb-3 leading-relaxed">
               {tour.summary}
             </p>
+
+            {/* Next Occurrence */}
+            {tour.nextOccurrenceAt && (
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-2">
+                <Calendar className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="line-clamp-1">
+                  {new Date(tour.nextOccurrenceAt).toLocaleDateString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })}
+                </span>
+              </div>
+            )}
 
             {/* Price */}
             <div className="flex items-baseline gap-1">
