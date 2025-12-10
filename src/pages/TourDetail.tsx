@@ -1,5 +1,5 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -27,7 +27,10 @@ import {
   Check,
   Plus,
   Minus,
-  UserCheck,
+  ChevronLeft,
+  ChevronRight,
+  X,
+  User,
 } from "lucide-react";
 import { experiencesAPI, reviewsAPI, bookingsAPI, API_ORIGIN } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
@@ -45,22 +48,27 @@ const TourDetail = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [reviewPage, setReviewPage] = useState(1);
-  const [reviewLimit, setReviewLimit] = useState(10); // Reduced from 50 to 10 for faster loading
+  const [reviewLimit, setReviewLimit] = useState(3); // Show 3 reviews initially, load 3 more each time
   const [reviewSort, setReviewSort] = useState("-createdAt");
   const [showAllReviews, setShowAllReviews] = useState(false);
   const [totalReviews, setTotalReviews] = useState(0);
   const [numGuests, setNumGuests] = useState<number>(1);
   const [availability, setAvailability] = useState<{available: number; booked: number; maxGuests: number} | null>(null);
-  const [requiresGuide, setRequiresGuide] = useState<boolean>(false);
-  const [guideCost, setGuideCost] = useState<number>(0);
-  const [assignedGuide, setAssignedGuide] = useState<any | null>(null);
   const [newReview, setNewReview] = useState("");
   const [newRating, setNewRating] = useState(0);
   const [submittingReview, setSubmittingReview] = useState(false);
   const [hasUserReviewed, setHasUserReviewed] = useState(false);
   const [hasBooked, setHasBooked] = useState<boolean>(false);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const { toast } = useToast();
+  const toastRef = useRef(toast);
+  
+  // Keep toast ref updated
+  useEffect(() => {
+    toastRef.current = toast;
+  }, [toast]);
 
   useEffect(() => {
     const fetchExperience = async () => {
@@ -71,20 +79,19 @@ const TourDetail = () => {
           const t = response.data.data;
           setExperience(t);
           setSelectedStartDate(null);
-          
-          // Debug: Log the experience data to see guide structure
-          if (process.env.NODE_ENV !== 'production') {
-            console.log('Fetched experience:', t);
-            console.log('Host:', t?.host);
-            console.log('Assigned guide:', t?.host?.assignedGuide);
-          }
-        } catch (err: unknown) {
+        } catch (err: any) {
           console.error("Failed to fetch experience:", err);
-          toast({
-            title: "Error",
-            description: "Failed to load experience from server.",
-            variant: "destructive",
-          });
+          // Don't show error toast for 401/403 errors - user might not be logged in
+          // This is expected for public access attempts, but the backend route is public
+          // So if we get 401/403, it might be a different issue - still don't show toast
+          const status = err.response?.status;
+          if (status !== 401 && status !== 403) {
+            toastRef.current({
+              title: "Error",
+              description: err.response?.data?.message || "Failed to load experience from server.",
+              variant: "destructive",
+            });
+          }
           setExperience(null);
         } finally {
           setIsLoading(false);
@@ -93,13 +100,18 @@ const TourDetail = () => {
     };
 
     fetchExperience();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, toast]);
+  }, [id]);
 
   // Check if current user has a booking for this experience
+  const experienceId = experience?._id ?? experience?.id ?? null;
+  const userId = (user as any)?._id ?? (user as any)?.id ?? null;
+  
   useEffect(() => {
     const checkBooking = async () => {
-      if (!isAuthenticated || !experience) return setHasBooked(false);
+      if (!isAuthenticated || !experienceId) {
+        setHasBooked(false);
+        return;
+      }
       try {
         const resp = await bookingsAPI.getMyBookings();
         // normalize response to array of bookings
@@ -110,7 +122,6 @@ const TourDetail = () => {
         else if (Array.isArray((resp as any).data?.data))
           bookingsList = (resp as any).data.data;
 
-        const experienceId = experience._id ?? experience.id ?? experience;
         const found = bookingsList.find((b: any) => {
           const bExperienceId = b.experience?._id ?? b.experience?.id ?? b.experience;
           return String(bExperienceId) === String(experienceId);
@@ -122,9 +133,9 @@ const TourDetail = () => {
       }
     };
     checkBooking();
-  }, [experience, isAuthenticated, user]);
+  }, [experienceId, isAuthenticated, userId]);
 
-  const fetchReviews = async (append = false) => {
+  const fetchReviews = useCallback(async (append = false) => {
     if (!id) return;
     setReviewsLoading(true);
     try {
@@ -151,44 +162,52 @@ const TourDetail = () => {
       }
 
       // Check if current user has already reviewed this experience
-      if (user && isAuthenticated) {
+      if (userId && isAuthenticated) {
         const userReview = newReviews.find((review: any) => {
           // Handle both populated and non-populated user references
           const reviewUserId =
             review.user?._id ?? review.user?.id ?? review.user;
-          const currentUserId = (user as any)._id ?? (user as any).id;
-          return String(reviewUserId) === String(currentUserId);
+          return String(reviewUserId) === String(userId);
         });
         setHasUserReviewed(!!userReview);
       } else {
         setHasUserReviewed(false);
       }
-    } catch (err: unknown) {
+    } catch (err: any) {
       console.error("Failed to fetch reviews:", err);
-      toast({
-        title: "Error",
-        description: "Failed to load reviews.",
-        variant: "destructive",
-      });
+      // Reviews are now public, but handle errors gracefully
+      const status = err.response?.status;
+      // Only show error for non-auth errors (reviews should be public now)
+      if (status !== 401 && status !== 403) {
+        toastRef.current({
+          title: "Error",
+          description: err.response?.data?.message || "Failed to load reviews.",
+          variant: "destructive",
+        });
+      }
+      // Reset reviews on error to show empty state
+      if (!append) {
+        setReviews([]);
+        setTotalReviews(0);
+      }
     } finally {
       setReviewsLoading(false);
     }
-  };
+  }, [id, reviewPage, reviewLimit, reviewSort, userId, isAuthenticated]);
 
   useEffect(() => {
-    // Reset to page 1 and fetch when id or filters change
+    // Reset to page 1 when id or sort changes
     setReviewPage(1);
-    fetchReviews(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, reviewLimit, reviewSort]);
+  }, [id, reviewSort]);
 
   useEffect(() => {
-    // Fetch more reviews when page changes (for pagination)
-    if (reviewPage > 1) {
+    // Fetch reviews when page changes
+    if (reviewPage === 1) {
+      fetchReviews(false);
+    } else if (reviewPage > 1) {
       fetchReviews(true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reviewPage]);
+  }, [reviewPage, fetchReviews]);
 
   useEffect(() => {
     const loadAvailability = async () => {
@@ -198,87 +217,19 @@ const TourDetail = () => {
         const data = resp.data || resp;
         const a = data.data || data;
         setAvailability(a);
-        // Adjust max for selector
+        // Adjust max for selector only if current selection exceeds available
         if (a && a.available > 0) {
-          setNumGuests((g) => Math.min(g, a.available));
+          setNumGuests((g) => {
+            const maxAllowed = Math.min(Number(experience?.maxGuests) || 1, a.available);
+            return Math.min(g, maxAllowed);
+          });
         }
       } catch {
         // ignore
       }
     };
     loadAvailability();
-  }, [id]);
-
-  // Get assigned guide from experience host
-  useEffect(() => {
-    if (!experience) {
-      setAssignedGuide(null);
-      setGuideCost(0);
-      return;
-    }
-    
-    // Get assigned guide from host
-    const host = experience.host;
-    const guide = host?.assignedGuide;
-    
-    // Debug logging
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('Experience host:', host);
-      console.log('Assigned guide:', guide);
-    }
-    
-    // Set guide if it exists (even if paymentPerHour is not set yet)
-    if (guide) {
-      // Check if guide is an object or just an ID
-      if (typeof guide === 'object' && guide !== null) {
-        setAssignedGuide(guide);
-      } else if (typeof guide === 'string') {
-        // Guide is just an ID, we need to fetch it or wait for it to be populated
-        // For now, set to null and let the backend handle it
-        setAssignedGuide(null);
-      }
-    } else {
-      setAssignedGuide(null);
-    }
-  }, [experience]);
-
-  // Calculate guide cost when guide is requested
-  useEffect(() => {
-    if (!requiresGuide || !assignedGuide || !experience?.duration) {
-      setGuideCost(0);
-      return;
-    }
-
-    // Parse duration to hours
-    const durationStr = experience.duration.toLowerCase();
-    const hourMatch = durationStr.match(/(\d+\.?\d*)\s*(?:hours?|hrs?|h)\b/i);
-    const minuteMatch = durationStr.match(/(\d+\.?\d*)\s*(?:minutes?|mins?|m)\b/i);
-    const dayMatch = durationStr.match(/(\d+\.?\d*)\s*(?:days?|d)\b/i);
-    
-    let hours = 0;
-    if (hourMatch) {
-      hours = parseFloat(hourMatch[1]);
-    } else if (minuteMatch) {
-      hours = parseFloat(minuteMatch[1]) / 60;
-    } else if (dayMatch) {
-      hours = parseFloat(dayMatch[1]) * 24;
-    } else {
-      // Try to extract any number and assume hours
-      const numMatch = durationStr.match(/(\d+\.?\d*)/);
-      if (numMatch) {
-        hours = parseFloat(numMatch[1]);
-      }
-    }
-    
-    const paymentPerHour = Number(assignedGuide.paymentPerHour) || 0;
-    
-    if (hours > 0 && paymentPerHour > 0) {
-      const cost = Math.round(hours * paymentPerHour * 100) / 100;
-      setGuideCost(cost);
-    } else {
-      setGuideCost(0);
-    }
-  }, [requiresGuide, assignedGuide, experience?.duration]);
+  }, [id, experience?.maxGuests]);
 
   if (isLoading) {
     return (
@@ -418,30 +369,36 @@ const TourDetail = () => {
         </section>
 
         {/* Content */}
-        <section className="py-16">
+        <section className="py-8 md:py-16">
           <div className="container mx-auto px-4">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 lg:gap-12">
               {/* Main Content */}
-              <div className="lg:col-span-2 space-y-8">
+              <div className="lg:col-span-2 space-y-10 md:space-y-12">
                 {/* Overview */}
-                <div className="animate-fade-in">
-                  <h2 className="font-display text-2xl md:text-3xl font-bold text-foreground mb-4">
-                    Overview
-                  </h2>
-                  <p className="text-base md:text-lg text-muted-foreground leading-relaxed mb-6">
-                    {experience.summary}
-                  </p>
-                  <p className="text-sm md:text-base text-muted-foreground leading-relaxed">
-                    {experience.description}
-                  </p>
+                <div className="animate-fade-in space-y-6">
+                  <div className="border-b border-border pb-4">
+                    <h2 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-2">
+                      Overview
+                    </h2>
+                  </div>
+                  <div className="space-y-4">
+                    <p className="text-lg md:text-xl text-foreground leading-relaxed font-medium">
+                      {experience.summary}
+                    </p>
+                    <p className="text-base md:text-lg text-muted-foreground leading-relaxed">
+                      {experience.description}
+                    </p>
+                  </div>
                 </div>
 
                 {/* Quick Facts */}
-                <Card className="border-2">
-                  <CardContent className="p-6">
-                    <h3 className="font-display text-xl md:text-2xl font-bold text-foreground mb-6">
-                      Quick Facts
-                    </h3>
+                <Card className="border-2 shadow-lg">
+                  <CardContent className="p-6 md:p-8">
+                    <div className="border-b border-border pb-4 mb-6">
+                      <h3 className="font-display text-2xl md:text-3xl font-bold text-foreground">
+                        Quick Facts
+                      </h3>
+                    </div>
                     <div className="grid grid-cols-2 gap-6">
                       <div className="flex items-start gap-3">
                         <Clock className="w-6 h-6 text-primary mt-1" />
@@ -511,42 +468,95 @@ const TourDetail = () => {
 
                 {/* Images Grid */}
                 <div>
-                  <h3 className="font-display text-xl md:text-2xl font-bold text-foreground mb-6">
-                    Gallery
-                  </h3>
-                  <div className="grid grid-cols-3 gap-4">
-                    {experience.images?.map((image: string, index: number) => (
-                      <div
-                        key={index}
-                        className="aspect-square rounded-lg overflow-hidden group"
-                      >
-                        <img
-                          src={
-                            image && String(image).startsWith("/")
-                              ? `${API_ORIGIN}${image}`
-                              : image ||
-                                `https://placehold.co/400x400/2d5a3d/ffd700?text=Image+${
-                                  index + 1
-                                }`
-                          }
-                          alt={`${experience.title} ${index + 1}`}
-                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                        />
-                      </div>
-                    )) || (
-                      <div className="col-span-3 text-center py-8 text-muted-foreground">
-                        No images available
-                      </div>
-                    )}
+                  <div className="border-b border-border pb-4 mb-6">
+                    <h3 className="font-display text-2xl md:text-3xl font-bold text-foreground">
+                      Gallery
+                    </h3>
                   </div>
+                  {(experience.images && experience.images.length > 0) || experience.imageCover ? (
+                    <>
+                      {/* Gallery Grid - Includes Cover Image */}
+                      <div className="grid grid-cols-2 gap-3 md:gap-4">
+                        {(() => {
+                          // Create array of all images with cover first if it exists and isn't already in images
+                          const allImages: string[] = [];
+                          const coverInImages = experience.imageCover && experience.images?.includes(experience.imageCover);
+                          
+                          // Add cover image first if it exists and isn't already in the images array
+                          if (experience.imageCover && !coverInImages) {
+                            allImages.push(experience.imageCover);
+                          }
+                          
+                          // Add all gallery images
+                          if (experience.images) {
+                            allImages.push(...experience.images);
+                          }
+                          
+                          return allImages.map((image: string, displayIndex: number) => {
+                            const isCover = displayIndex === 0 && experience.imageCover && !coverInImages;
+                            // Find the index in the original images array for lightbox navigation
+                            let lightboxIndex: number;
+                            if (isCover) {
+                              // Cover image - find its index in images array, or use 0
+                              lightboxIndex = experience.images?.findIndex((img: string) => img === experience.imageCover) ?? 0;
+                            } else {
+                              // Regular image - adjust index if cover was added
+                              const offset = (experience.imageCover && !coverInImages) ? 1 : 0;
+                              lightboxIndex = displayIndex - offset;
+                            }
+                            
+                            return (
+                              <div
+                                key={displayIndex}
+                                className="relative aspect-square rounded-lg overflow-hidden group cursor-pointer shadow-md hover:shadow-xl transition-all duration-300"
+                                onClick={() => {
+                                  setSelectedImageIndex(Math.max(0, lightboxIndex));
+                                  setLightboxOpen(true);
+                                }}
+                              >
+                                <img
+                                  src={
+                                    image && String(image).startsWith("/")
+                                      ? `${API_ORIGIN}${image}`
+                                      : image ||
+                                        `https://placehold.co/400x400/2d5a3d/ffd700?text=Image+${
+                                          displayIndex + 1
+                                        }`
+                                  }
+                                  alt={isCover ? experience.title : `${experience.title} ${displayIndex + 1}`}
+                                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                                />
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
+                                {isCover && (
+                                  <div className="absolute top-2 left-2 bg-primary/90 text-primary-foreground px-2 py-1 rounded text-xs font-semibold">
+                                    Cover
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                    </>
+                  ) : (
+                    <Card>
+                      <CardContent className="p-12 text-center">
+                        <p className="text-muted-foreground text-lg">
+                          No images available
+                        </p>
+                      </CardContent>
+                    </Card>
+                  )}
                 </div>
 
                 {/* Reviews Section */}
                 <div>
-                  <h3 className="font-display text-xl md:text-2xl font-bold text-foreground mb-6 flex items-center gap-2">
-                    <MessageSquare className="w-5 h-5 md:w-6 md:h-6" />
-                    Reviews {totalReviews > 0 && `(${totalReviews})`}
-                  </h3>
+                  <div className="border-b border-border pb-4 mb-6">
+                    <h3 className="font-display text-2xl md:text-3xl font-bold text-foreground flex items-center gap-3">
+                      <MessageSquare className="w-6 h-6 md:w-7 md:h-7 text-primary" />
+                      Reviews {totalReviews > 0 && `(${totalReviews})`}
+                    </h3>
+                  </div>
 
                   {/* Rate & Review Button */}
                   {isAuthenticated && !hasUserReviewed && (
@@ -572,6 +582,36 @@ const TourDetail = () => {
                           <p className="font-medium">
                             You have already reviewed this experience
                           </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Login Prompt for Writing Reviews (Unauthenticated Users) */}
+                  {!isAuthenticated && (
+                    <Card className="mb-6 border-2 border-primary/20 bg-primary/5">
+                      <CardContent className="p-6 text-center">
+                        <div className="flex flex-col items-center gap-4">
+                          <div className="bg-primary/10 p-3 rounded-full">
+                            <MessageSquare className="w-6 h-6 text-primary" />
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-foreground mb-2">
+                              Login to Write a Review
+                            </h4>
+                            <p className="text-sm text-muted-foreground mb-4">
+                              Share your experience and help others discover great experiences
+                            </p>
+                            <Button
+                              variant="hero"
+                              size="lg"
+                              onClick={() => navigate("/login", { state: { from: { pathname: `/experiences/${id}` } } })}
+                              className="w-full sm:w-auto"
+                            >
+                              <User className="w-4 h-4 mr-2" />
+                              Login to Write Review
+                            </Button>
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -621,7 +661,7 @@ const TourDetail = () => {
                           </Card>
                         ))}
                       </div>
-                      {/* Load More Button */}
+                      {/* Show More Button */}
                       {totalReviews > reviews.length && (
                         <div className="mt-6 text-center">
                           <Button
@@ -638,7 +678,7 @@ const TourDetail = () => {
                               </>
                             ) : (
                               <>
-                                Load More ({reviews.length} of {totalReviews})
+                                Show More ({reviews.length} of {totalReviews})
                               </>
                             )}
                           </Button>
@@ -651,20 +691,20 @@ const TourDetail = () => {
 
               {/* Sidebar */}
               <div className="lg:col-span-1">
-                <Card className="sticky top-24 border-2 shadow-xl">
-                  <CardContent className="p-6">
-                    <div className="text-center mb-6">
-                      <p className="text-xs md:text-sm text-muted-foreground mb-2">
+                <Card className="sticky top-24 border-2 shadow-2xl">
+                  <CardContent className="p-6 md:p-8">
+                    <div className="text-center mb-8 pb-6 border-b border-border">
+                      <p className="text-sm text-muted-foreground mb-2 font-medium">
                         Price per person
                       </p>
-                      <p className="text-3xl md:text-5xl font-bold text-primary">
-                        ETB {experience.price}
+                      <p className="text-4xl md:text-6xl font-bold text-primary">
+                        ETB {experience.price?.toLocaleString()}
                       </p>
                     </div>
 
-                    <div className="mb-6">
-                      <label className="text-sm font-medium mb-3 block">Number of Guests</label>
-                      <div className="flex items-center gap-3 mb-3">
+                    <div className="mb-8">
+                      <label className="text-base font-semibold mb-4 block text-foreground">Number of Guests</label>
+                      <div className="flex items-center gap-3 mb-4">
                         <Button
                           type="button"
                           variant="outline"
@@ -713,173 +753,121 @@ const TourDetail = () => {
                           <Plus className="w-4 h-4" />
                         </Button>
                       </div>
-                      <div className="text-center text-xs text-muted-foreground mb-2">
-                        Max {experience.maxGuests} guests • {availability?.available ?? experience.maxGuests} spots available
+                      <div className="flex items-center justify-between text-sm mb-3">
+                        <span className="text-muted-foreground">
+                          Max {experience.maxGuests} guests
+                        </span>
+                        <Badge variant={availability && availability.available > 0 ? "secondary" : "destructive"}>
+                          {availability?.available ?? experience.maxGuests} available
+                        </Badge>
                       </div>
-                      <div className="text-center text-base font-semibold text-primary">
-                        Total: ETB {Number(experience.price) * (numGuests || 1)}
+                      {availability && availability.available > 0 && (
+                        <div className="w-full bg-muted rounded-full h-2 mb-4">
+                          <div
+                            className="bg-primary h-2 rounded-full transition-all duration-300"
+                            style={{
+                              width: `${(availability.available / experience.maxGuests) * 100}%`,
+                            }}
+                          />
+                        </div>
+                      )}
+                      <div className="bg-primary/10 rounded-lg p-4 border border-primary/20">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium text-muted-foreground">Total Price</span>
+                          <span className="text-2xl font-bold text-primary">
+                            ETB {(Number(experience.price) * (numGuests || 1)).toLocaleString()}
+                          </span>
+                        </div>
                       </div>
                       {availability && availability.available > 0 && numGuests >= availability.available && (
-                        <div className="mt-2 text-center text-xs text-amber-700">
+                        <div className="mt-3 text-center text-sm text-amber-600 font-medium">
                           Maximum available is {availability.available}.
                         </div>
                       )}
                     </div>
 
-                    {/* Guide Selection */}
-                    <div className="mb-6">
-                      <div className="flex items-center justify-between mb-3">
-                        <label className="text-sm font-medium">Need a Guide?</label>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setRequiresGuide(!requiresGuide);
-                          }}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                            requiresGuide ? 'bg-primary' : 'bg-muted'
-                          } cursor-pointer`}
-                        >
-                          <span
-                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                              requiresGuide ? 'translate-x-6' : 'translate-x-1'
-                            }`}
-                          />
-                        </button>
-                      </div>
-                      
-                      {requiresGuide && (
-                        <div className="mt-3 space-y-3">
-                          {assignedGuide ? (
-                            <div className="p-4 bg-primary/5 rounded-md border border-primary/20">
-                              <div className="flex items-start gap-3 mb-3">
-                                {assignedGuide.photo ? (
-                                  <Avatar className="w-10 h-10">
-                                    <AvatarImage
-                                      src={
-                                        String(assignedGuide.photo).startsWith('/')
-                                          ? `${API_ORIGIN}${assignedGuide.photo}`
-                                          : assignedGuide.photo
-                                      }
-                                      alt={assignedGuide.name || 'Guide'}
-                                    />
-                                    <AvatarFallback className="bg-primary/10 text-primary font-semibold text-xs">
+                    {/* Host */}
+                    {experience.host && (
+                      <div className="mb-6 pb-6 border-b border-border">
+                        <h4 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                          <User className="w-5 h-5 text-primary" />
+                          Your Host
+                        </h4>
+                        <Card className="border-2">
+                          <CardContent className="p-4">
+                            <div className="flex items-center gap-4">
+                              {typeof experience.host === 'object' ? (
+                                <>
+                                  {experience.host.photo ? (
+                                    <Avatar className="w-16 h-16 border-2 border-primary/20">
+                                      <AvatarImage
+                                        src={
+                                          String(experience.host.photo).startsWith('/')
+                                            ? `${API_ORIGIN}${experience.host.photo}`
+                                            : experience.host.photo
+                                        }
+                                        alt={experience.host.name}
+                                      />
+                                      <AvatarFallback className="bg-primary/10 text-primary font-semibold">
+                                        {(() => {
+                                          const name = experience.host.name || experience.host.email || 'Guest';
+                                          const parts = name.trim().split(/\s+/);
+                                          if (parts.length >= 2) {
+                                            return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+                                          }
+                                          return name.substring(0, 2).toUpperCase();
+                                        })()}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                  ) : (
+                                    <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold border-2 border-primary/20">
                                       {(() => {
-                                        const name = assignedGuide.name || 'Guide';
+                                        const name = experience.host.name || experience.host.email || 'Guest';
                                         const parts = name.trim().split(/\s+/);
                                         if (parts.length >= 2) {
                                           return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
                                         }
                                         return name.substring(0, 2).toUpperCase();
                                       })()}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                ) : (
-                                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-xs">
-                                    {(() => {
-                                      const name = assignedGuide.name || 'Guide';
-                                      const parts = name.trim().split(/\s+/);
-                                      if (parts.length >= 2) {
-                                        return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-                                      }
-                                      return name.substring(0, 2).toUpperCase();
-                                    })()}
-                                  </div>
-                                )}
-                                <div className="flex-1">
-                                  <div className="font-semibold text-sm">{assignedGuide.name || 'Professional Guide'}</div>
-                                  <div className="text-xs text-muted-foreground">
-                                    {assignedGuide.location || 'Professional Guide'}
-                                  </div>
-                                </div>
-                              </div>
-                              
-                              <div className="pt-3 border-t border-primary/20">
-                                {assignedGuide.paymentPerHour ? (
-                                  <>
-                                    <div className="flex items-center justify-between text-sm mb-2">
-                                      <span className="text-muted-foreground">Payment Rate:</span>
-                                      <span className="font-semibold text-primary">ETB {assignedGuide.paymentPerHour}/hour</span>
                                     </div>
-                                    {guideCost > 0 ? (
-                                      <>
-                                        <div className="flex items-center justify-between text-sm mb-1">
-                                          <span className="text-muted-foreground">Experience Duration:</span>
-                                          <span className="font-medium">{experience.duration}</span>
-                                        </div>
-                                        <div className="flex items-center justify-between text-sm mb-1 pt-2 border-t border-primary/10">
-                                          <span className="text-muted-foreground">Guide Service Cost:</span>
-                                          <span className="font-bold text-lg text-primary">ETB {guideCost.toFixed(2)}</span>
-                                        </div>
-                                        <div className="text-xs text-muted-foreground mt-1">
-                                          Calculation: {experience.duration} × ETB {assignedGuide.paymentPerHour}/hour = ETB {guideCost.toFixed(2)}
-                                        </div>
-                                      </>
-                                    ) : (
-                                      <div className="text-xs text-muted-foreground mt-1">
-                                        Cost will be calculated based on experience duration
-                                      </div>
-                                    )}
-                                  </>
-                                ) : (
-                                  <div className="text-xs text-muted-foreground">
-                                    Guide payment rate not set. Please contact support.
+                                  )}
+                                  <div className="flex-1">
+                                    <div className="font-semibold text-base mb-1">{experience.host.name}</div>
+                                    <div className="text-sm text-muted-foreground">
+                                      {experience.host.email}
+                                    </div>
                                   </div>
-                                )}
-                              </div>
+                                </>
+                              ) : null}
                             </div>
-                          ) : (
-                            <div className="p-4 bg-muted/50 rounded-md border border-muted text-sm text-muted-foreground">
-                              Loading guide information...
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Total Price Display */}
-                    <div className="mb-6 p-4 bg-muted/30 rounded-lg border">
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Experience ({numGuests} {numGuests === 1 ? 'guest' : 'guests'}):</span>
-                          <span className="font-medium">ETB {Number(experience.price) * numGuests}</span>
-                        </div>
-                        {requiresGuide && guideCost > 0 && (
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Guide Service:</span>
-                            <span className="font-medium">ETB {guideCost}</span>
-                          </div>
-                        )}
-                        <div className="flex justify-between pt-2 border-t border-border">
-                          <span className="font-semibold">Total:</span>
-                          <span className="font-bold text-lg text-primary">
-                            ETB {Number(experience.price) * numGuests + guideCost}
-                          </span>
-                        </div>
+                          </CardContent>
+                        </Card>
                       </div>
-                    </div>
+                    )}
 
-                    {/* Host */}
-                    {experience.host && (
-                      <div className="mb-6">
-                        <h4 className="text-base md:text-lg font-semibold mb-3">
-                          Your Host
+                    {/* Guide */}
+                    {experience.host && typeof experience.host === 'object' && experience.host.assignedGuide && (
+                      <div className="mb-6 pb-6 border-b border-border">
+                        <h4 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                          <User className="w-5 h-5 text-secondary" />
+                          Your Guide
                         </h4>
-                        <div className="flex items-center gap-3">
-                          {typeof experience.host === 'object' ? (
-                            <>
-                              {experience.host.photo ? (
-                                <Avatar className="w-12 h-12">
+                        <Card className="border-2 border-secondary/20">
+                          <CardContent className="p-4">
+                            <div className="flex items-center gap-4">
+                              {experience.host.assignedGuide.photo ? (
+                                <Avatar className="w-16 h-16 border-2 border-secondary/30">
                                   <AvatarImage
                                     src={
-                                      String(experience.host.photo).startsWith('/')
-                                        ? `${API_ORIGIN}${experience.host.photo}`
-                                        : experience.host.photo
+                                      String(experience.host.assignedGuide.photo).startsWith('/')
+                                        ? `${API_ORIGIN}${experience.host.assignedGuide.photo}`
+                                        : experience.host.assignedGuide.photo
                                     }
-                                    alt={experience.host.name}
+                                    alt={experience.host.assignedGuide.name}
                                   />
-                                  <AvatarFallback className="bg-primary/10 text-primary font-semibold text-sm">
+                                  <AvatarFallback className="bg-secondary/10 text-secondary font-semibold">
                                     {(() => {
-                                      const name = experience.host.name || experience.host.email || 'Guest';
+                                      const name = experience.host.assignedGuide.name || experience.host.assignedGuide.email || 'Guide';
                                       const parts = name.trim().split(/\s+/);
                                       if (parts.length >= 2) {
                                         return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
@@ -889,9 +877,9 @@ const TourDetail = () => {
                                   </AvatarFallback>
                                 </Avatar>
                               ) : (
-                                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm">
+                                <div className="w-16 h-16 rounded-full bg-secondary/10 flex items-center justify-center text-secondary font-semibold border-2 border-secondary/30">
                                   {(() => {
-                                    const name = experience.host.name || experience.host.email || 'Guest';
+                                    const name = experience.host.assignedGuide.name || experience.host.assignedGuide.email || 'Guide';
                                     const parts = name.trim().split(/\s+/);
                                     if (parts.length >= 2) {
                                       return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
@@ -900,33 +888,79 @@ const TourDetail = () => {
                                   })()}
                                 </div>
                               )}
-                              <div>
-                                <div className="font-semibold">{experience.host.name}</div>
-                                <div className="text-xs text-muted-foreground">
-                                  {experience.host.email}
+                              <div className="flex-1">
+                                <div className="font-semibold text-base mb-1 flex items-center gap-2">
+                                  {experience.host.assignedGuide.name}
+                                  {experience.host.assignedGuide.guideStatus === 'approved' && (
+                                    <Badge variant="secondary" className="text-xs">Verified</Badge>
+                                  )}
                                 </div>
+                                {experience.host.assignedGuide.location && (
+                                  <div className="text-sm text-muted-foreground flex items-center gap-1 mb-1">
+                                    <MapPin className="w-3 h-3" />
+                                    {experience.host.assignedGuide.location}
+                                  </div>
+                                )}
+                                {experience.host.assignedGuide.paymentPerHour && (
+                                  <div className="text-sm font-medium text-secondary">
+                                    ETB {experience.host.assignedGuide.paymentPerHour}/hour
+                                  </div>
+                                )}
                               </div>
-                            </>
-                          ) : null}
-                        </div>
+                            </div>
+                          </CardContent>
+                        </Card>
                       </div>
                     )}
 
                     {/* Map */}
                     {experience.startLocation?.coordinates && (
                       <div className="mb-6">
-                        <h4 className="text-base md:text-lg font-semibold mb-3">Location</h4>
-                        <iframe
-                          title="location-map"
-                          src={`https://www.google.com/maps?q=${experience.startLocation.coordinates[1]},${experience.startLocation.coordinates[0]}&z=12&output=embed`}
-                          width="100%"
-                          height="200"
-                          style={{ border: 0, borderRadius: '8px' }}
-                        />
+                        <h4 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                          <MapPin className="w-5 h-5 text-primary" />
+                          Location
+                        </h4>
+                        <Card className="border-2 overflow-hidden">
+                          <iframe
+                            title="location-map"
+                            src={`https://www.google.com/maps?q=${experience.startLocation.coordinates[1]},${experience.startLocation.coordinates[0]}&z=12&output=embed`}
+                            width="100%"
+                            height="250"
+                            style={{ border: 0 }}
+                            className="w-full"
+                          />
+                        </Card>
                       </div>
                     )}
 
-                    {hasBooked ? (
+                    {!isAuthenticated ? (
+                      <Card className="mb-3 border-2 border-primary/20 bg-primary/5">
+                        <CardContent className="p-6 text-center">
+                          <div className="flex flex-col items-center gap-4">
+                            <div className="bg-primary/10 p-3 rounded-full">
+                              <Calendar className="w-6 h-6 text-primary" />
+                            </div>
+                            <div>
+                              <h4 className="font-semibold text-foreground mb-2">
+                                Login to Book This Experience
+                              </h4>
+                              <p className="text-sm text-muted-foreground mb-4">
+                                Please login to book this experience and secure your spot
+                              </p>
+                              <Button
+                                variant="hero"
+                                size="lg"
+                                onClick={() => navigate("/login", { state: { from: { pathname: `/experiences/${id}` } } })}
+                                className="w-full"
+                              >
+                                <User className="w-4 h-4 mr-2" />
+                                Login to Book
+                              </Button>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ) : hasBooked ? (
                       <Button
                         variant="secondary"
                         size="xl"
@@ -940,24 +974,8 @@ const TourDetail = () => {
                         variant="hero"
                         size="xl"
                         className="w-full mb-3"
-                        disabled={
-                          ((availability?.available ?? 1) < 1) || 
-                          (numGuests > (availability?.available ?? (Number(experience.maxGuests) || 1))) ||
-                          (requiresGuide && !assignedGuide)
-                        }
+                        disabled={((availability?.available ?? 1) < 1) || (numGuests > (availability?.available ?? (Number(experience.maxGuests) || 1)))}
                         onClick={async () => {
-                          if (!isAuthenticated) {
-                            toast({
-                              title: "Login Required",
-                              description: "Please login to book this experience",
-                              variant: "destructive",
-                            });
-                            navigate("/login");
-                            return;
-                          }
-
-                          // Note: All experiences have assigned guides, so we proceed with booking
-                          // The backend will handle validation if guide is not available
 
                           try {
                             toast({
@@ -965,7 +983,7 @@ const TourDetail = () => {
                               description:
                                 "You will be redirected to complete payment",
                             });
-                            const resp = await bookingsAPI.create(id as string, numGuests, requiresGuide);
+                            const resp = await bookingsAPI.create(id as string, numGuests);
                             const checkoutUrl =
                               resp.checkout_url || resp.data?.checkout_url;
                             if (checkoutUrl) {
@@ -1060,6 +1078,69 @@ const TourDetail = () => {
           </div>
         </section>
       </main>
+
+      {/* Image Lightbox */}
+      <Dialog open={lightboxOpen} onOpenChange={setLightboxOpen}>
+        <DialogContent className="max-w-7xl w-full p-0 bg-black/95 border-none">
+          <div className="relative w-full h-[90vh] flex items-center justify-center">
+            {experience.images && experience.images.length > 0 && (
+              <>
+                <button
+                  onClick={() => setLightboxOpen(false)}
+                  className="absolute top-4 right-4 z-50 text-white hover:text-gray-300 transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="w-8 h-8" />
+                </button>
+                {experience.images.length > 1 && (
+                  <>
+                    <button
+                      onClick={() => {
+                        setSelectedImageIndex((prev) =>
+                          prev === 0 ? experience.images.length - 1 : prev - 1
+                        );
+                      }}
+                      className="absolute left-4 z-50 text-white hover:text-gray-300 transition-colors bg-black/50 rounded-full p-2"
+                      aria-label="Previous image"
+                    >
+                      <ChevronLeft className="w-8 h-8" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedImageIndex((prev) =>
+                          prev === experience.images.length - 1 ? 0 : prev + 1
+                        );
+                      }}
+                      className="absolute right-4 z-50 text-white hover:text-gray-300 transition-colors bg-black/50 rounded-full p-2"
+                      aria-label="Next image"
+                    >
+                      <ChevronRight className="w-8 h-8" />
+                    </button>
+                  </>
+                )}
+                <img
+                  src={
+                    experience.images[selectedImageIndex] &&
+                    String(experience.images[selectedImageIndex]).startsWith("/")
+                      ? `${API_ORIGIN}${experience.images[selectedImageIndex]}`
+                      : experience.images[selectedImageIndex] ||
+                        `https://placehold.co/800x600/2d5a3d/ffd700?text=Image+${
+                          selectedImageIndex + 1
+                        }`
+                  }
+                  alt={`${experience.title} ${selectedImageIndex + 1}`}
+                  className="max-w-full max-h-full object-contain"
+                />
+                {experience.images.length > 1 && (
+                  <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 text-white text-sm">
+                    {selectedImageIndex + 1} / {experience.images.length}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Review Modal */}
       <Dialog open={reviewModalOpen} onOpenChange={setReviewModalOpen}>

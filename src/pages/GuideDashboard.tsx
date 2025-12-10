@@ -18,9 +18,8 @@ import {
   Calendar,
   Briefcase,
 } from "lucide-react";
-import { guidesAPI, experiencesAPI, bookingsAPI, type BookingRecord } from "@/lib/api";
+import { guidesAPI, experiencesAPI } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 export default function GuideDashboard() {
   const { user, isAuthenticated } = useAuth();
@@ -29,8 +28,6 @@ export default function GuideDashboard() {
   const [hosts, setHosts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [hostExperiences, setHostExperiences] = useState<Record<string, any[]>>({});
-  const [bookings, setBookings] = useState<BookingRecord[]>([]);
-  const [bookingsLoading, setBookingsLoading] = useState(true);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -50,47 +47,7 @@ export default function GuideDashboard() {
     }
 
     fetchAssignedHosts();
-    fetchGuideBookings();
   }, [user, isAuthenticated, navigate, toast]);
-
-  const fetchGuideBookings = async () => {
-    try {
-      setBookingsLoading(true);
-      const resp = await bookingsAPI.getGuideBookings();
-      
-      // Debug logging
-      console.log('Guide bookings response:', resp);
-      
-      // Handle different response structures
-      let bookingsList: BookingRecord[] = [];
-      if (Array.isArray(resp?.data)) {
-        bookingsList = resp.data;
-      } else if (Array.isArray((resp as any)?.data?.data)) {
-        bookingsList = (resp as any).data.data;
-      } else if (Array.isArray(resp)) {
-        bookingsList = resp;
-      }
-      
-      console.log('Parsed bookings list:', bookingsList);
-      console.log('Number of bookings:', bookingsList.length);
-      
-      if (bookingsList.length > 0) {
-        console.log('First booking:', bookingsList[0]);
-        console.log('First booking user:', bookingsList[0].user);
-      }
-      
-      setBookings(bookingsList);
-    } catch (err: any) {
-      console.error("Failed to fetch guide bookings:", err);
-      toast({
-        title: "Error",
-        description: "Failed to load bookings",
-        variant: "destructive",
-      });
-    } finally {
-      setBookingsLoading(false);
-    }
-  };
 
   const fetchAssignedHosts = async () => {
     try {
@@ -164,173 +121,6 @@ export default function GuideDashboard() {
           }
           description="View and manage your assigned hosts"
         />
-
-        {/* Bookings Section */}
-        <section className="py-16 bg-muted/30">
-          <div className="container mx-auto px-4">
-            <div className="mb-6">
-              <h2 className="text-2xl font-semibold mb-2">My Bookings ({bookings.length})</h2>
-              <p className="text-muted-foreground">
-                Bookings where you are assigned as a guide - contact your guests here
-              </p>
-            </div>
-
-            {bookingsLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              </div>
-            ) : bookings.length === 0 ? (
-              <Card>
-                <CardContent className="p-12 text-center">
-                  <Calendar className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
-                  <h3 className="text-xl font-semibold mb-2">No Bookings Yet</h3>
-                  <p className="text-muted-foreground">
-                    You don't have any bookings assigned to you yet. Bookings will appear here when guests book experiences with you as their guide.
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid gap-4">
-                {bookings.map((booking) => {
-                  const guest = typeof booking.user === 'object' && booking.user !== null ? booking.user : null;
-                  const experience = typeof booking.experience === 'object' && booking.experience !== null ? booking.experience : null;
-                  const experienceDate = booking.experienceDate ? new Date(booking.experienceDate) : null;
-                  const guideCost = booking.guideCost || 0;
-                  
-                  return (
-                    <Card key={booking._id || booking.id} className="hover:shadow-lg transition-shadow">
-                      <CardContent className="p-6">
-                        <div className="flex flex-col md:flex-row md:items-start gap-6">
-                          {/* Guest Information */}
-                          <div className="flex-1">
-                            <div className="flex items-start gap-4 mb-4">
-                              {guest?.photo ? (
-                                <Avatar className="w-16 h-16">
-                                  <AvatarImage
-                                    src={guest.photo}
-                                    alt={guest.name || 'Guest'}
-                                  />
-                                  <AvatarFallback className="bg-primary/10 text-primary font-semibold">
-                                    {(() => {
-                                      const name = guest.name || 'Guest';
-                                      const parts = name.trim().split(/\s+/);
-                                      if (parts.length >= 2) {
-                                        return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-                                      }
-                                      return name.substring(0, 2).toUpperCase();
-                                    })()}
-                                  </AvatarFallback>
-                                </Avatar>
-                              ) : (
-                                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-lg">
-                                  {(() => {
-                                    const name = guest?.name || 'Guest';
-                                    const parts = name.trim().split(/\s+/);
-                                    if (parts.length >= 2) {
-                                      return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-                                    }
-                                    return name.substring(0, 2).toUpperCase();
-                                  })()}
-                                </div>
-                              )}
-                              <div className="flex-1">
-                                <h3 className="font-semibold text-lg mb-2">
-                                  {guest?.name || 'Guest (Information Loading...)'}
-                                </h3>
-                                {guest ? (
-                                  <div className="space-y-2 text-sm">
-                                    {guest.email ? (
-                                      <div className="flex items-center gap-2">
-                                        <Mail className="w-4 h-4 text-muted-foreground" />
-                                        <a href={`mailto:${guest.email}`} className="text-primary hover:underline">
-                                          {guest.email}
-                                        </a>
-                                      </div>
-                                    ) : (
-                                      <div className="flex items-center gap-2 text-muted-foreground">
-                                        <Mail className="w-4 h-4" />
-                                        <span>Email not available</span>
-                                      </div>
-                                    )}
-                                    {(() => {
-                                      const guestPhone = guest.phone || 
-                                                        guest.hostApplicationData?.phoneNumber || 
-                                                        guest.guideApplicationData?.phoneNumber || 
-                                                        null;
-                                      return guestPhone ? (
-                                        <div className="flex items-center gap-2">
-                                          <Phone className="w-4 h-4 text-muted-foreground" />
-                                          <a href={`tel:${guestPhone}`} className="text-primary hover:underline">
-                                            {guestPhone}
-                                          </a>
-                                        </div>
-                                      ) : (
-                                        <div className="flex items-center gap-2 text-muted-foreground">
-                                          <Phone className="w-4 h-4" />
-                                          <span>Phone not available</span>
-                                        </div>
-                                      );
-                                    })()}
-                                  </div>
-                                ) : (
-                                  <div className="text-sm text-muted-foreground">
-                                    <p>Guest information is being loaded...</p>
-                                    <p className="text-xs mt-1">Booking ID: {booking._id || booking.id}</p>
-                                    <p className="text-xs">User field: {typeof booking.user}</p>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Experience Details */}
-                            {experience && (
-                              <div className="mt-4 p-4 bg-muted/50 rounded-md">
-                                <h4 className="font-semibold mb-2">{experience.title || 'Experience'}</h4>
-                                {experienceDate && (
-                                  <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-                                    <Calendar className="w-4 h-4" />
-                                    <span>Experience Date: {experienceDate.toLocaleString()}</span>
-                                  </div>
-                                )}
-                                <div className="text-sm text-muted-foreground">
-                                  <span>Guests: {booking.quantity || 1}</span>
-                                  {guideCost > 0 && (
-                                    <span className="ml-4">Guide Service: ETB {guideCost.toFixed(2)}</span>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Booking Status */}
-                          <div className="flex flex-col items-end gap-2">
-                            <Badge 
-                              variant="outline" 
-                              className={
-                                booking.status === 'completed' 
-                                  ? 'bg-green-50 text-green-700 border-green-200'
-                                  : booking.status === 'expired'
-                                  ? 'bg-gray-50 text-gray-700 border-gray-200'
-                                  : 'bg-blue-50 text-blue-700 border-blue-200'
-                              }
-                            >
-                              {booking.status || 'upcoming'}
-                            </Badge>
-                            {booking.paid && (
-                              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                                Paid
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </section>
 
         {/* Hosts List */}
         <section className="py-16">

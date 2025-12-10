@@ -1,12 +1,15 @@
-import { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useEffect, useState, useMemo } from 'react';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import Navigation from '@/components/Navigation';
 import Footer from '@/components/Footer';
+import PageHeader from '@/components/PageHeader';
 import { bookingsAPI, type BookingRecord, API_ORIGIN } from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { Loader2, UserCheck, Phone, Mail } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Loader2, Calendar, Users, DollarSign, Clock, CheckCircle, XCircle, ExternalLink, MapPin, AlertCircle, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const STATUS_STYLES: Record<
   string,
@@ -59,10 +62,10 @@ const describeRelativeDifference = (target: Date, base: Date) => {
 };
 
 const MyBookings = () => {
-
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string>('all');
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -161,34 +164,203 @@ const MyBookings = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search]);
 
+  // Filter bookings by status
+  const filteredBookings = useMemo(() => {
+    if (statusFilter === 'all') return bookings;
+    return bookings.filter(b => {
+      const status = (b.status || 'upcoming').toLowerCase();
+      return status === statusFilter;
+    });
+  }, [bookings, statusFilter]);
+
+  // Group bookings by status for stats
+  const bookingStats = useMemo(() => {
+    const stats = {
+      all: bookings.length,
+      upcoming: 0,
+      active: 0,
+      completed: 0,
+      expired: 0,
+    };
+    bookings.forEach(b => {
+      const status = (b.status || 'upcoming').toLowerCase();
+      if (status === 'upcoming' || status === 'active') {
+        stats.upcoming++;
+        stats.active++;
+      } else if (status === 'completed') {
+        stats.completed++;
+      } else if (status === 'expired') {
+        stats.expired++;
+      }
+    });
+    return stats;
+  }, [bookings]);
+
+  // Loading skeleton component
+  const LoadingSkeleton = () => (
+    <Card className="border-2 shadow-sm">
+      <CardContent className="p-6">
+        <div className="flex flex-col md:flex-row gap-6">
+          <div className="flex-1 space-y-4">
+            <div className="h-6 bg-muted rounded animate-pulse w-3/4" />
+            <div className="space-y-2">
+              <div className="h-4 bg-muted rounded animate-pulse w-full" />
+              <div className="h-4 bg-muted rounded animate-pulse w-2/3" />
+            </div>
+          </div>
+          <div className="flex flex-col gap-3 items-end">
+            <div className="h-6 bg-muted rounded-full animate-pulse w-20" />
+            <div className="h-8 bg-muted rounded animate-pulse w-24" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
   return (
     <div className="min-h-screen flex flex-col">
       <Navigation />
 
       <main className="flex-1 pt-16">
-        <section className="py-20">
-          <div className="container mx-auto px-4">
-            <h1 className="font-display text-3xl font-bold mb-6">
-              My Bookings
-            </h1>
+        <PageHeader
+          title="My Bookings"
+          description="View and manage all your experience bookings"
+        />
 
+        <section className="py-8 md:py-16">
+          <div className="container mx-auto px-4">
+            {/* Stats Cards */}
+            {!isLoading && bookings.length > 0 && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                <Card className="border-2">
+                  <CardContent className="p-4 text-center">
+                    <div className="text-2xl font-bold text-foreground">{bookingStats.all}</div>
+                    <div className="text-sm text-muted-foreground mt-1">Total</div>
+                  </CardContent>
+                </Card>
+                <Card className="border-2">
+                  <CardContent className="p-4 text-center">
+                    <div className="text-2xl font-bold text-primary">{bookingStats.upcoming}</div>
+                    <div className="text-sm text-muted-foreground mt-1">Upcoming</div>
+                  </CardContent>
+                </Card>
+                <Card className="border-2">
+                  <CardContent className="p-4 text-center">
+                    <div className="text-2xl font-bold text-green-600">{bookingStats.completed}</div>
+                    <div className="text-sm text-muted-foreground mt-1">Completed</div>
+                  </CardContent>
+                </Card>
+                <Card className="border-2">
+                  <CardContent className="p-4 text-center">
+                    <div className="text-2xl font-bold text-gray-500">{bookingStats.expired}</div>
+                    <div className="text-sm text-muted-foreground mt-1">Expired</div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* Status Filter Tabs */}
+            {!isLoading && bookings.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-6">
+                <Button
+                  variant={statusFilter === 'all' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setStatusFilter('all')}
+                >
+                  All ({bookingStats.all})
+                </Button>
+                <Button
+                  variant={statusFilter === 'upcoming' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setStatusFilter('upcoming')}
+                >
+                  Upcoming ({bookingStats.upcoming})
+                </Button>
+                <Button
+                  variant={statusFilter === 'completed' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setStatusFilter('completed')}
+                >
+                  Completed ({bookingStats.completed})
+                </Button>
+                <Button
+                  variant={statusFilter === 'expired' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setStatusFilter('expired')}
+                >
+                  Expired ({bookingStats.expired})
+                </Button>
+              </div>
+            )}
+
+            {/* Error State */}
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-6 p-4 bg-destructive/10 border border-destructive/20 rounded-lg flex items-center gap-3"
+              >
+                <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0" />
+                <p className="text-sm text-foreground">{error}</p>
+              </motion.div>
+            )}
+
+            {/* Loading State */}
             {isLoading ? (
-              <div className="flex items-center justify-center py-20">
-                <Loader2 className="w-12 h-12 animate-spin text-primary" />
+              <div className="space-y-6">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <LoadingSkeleton key={i} />
+                ))}
               </div>
-            ) : error ? (
-              <div className="p-6 bg-destructive/10 text-destructive rounded-lg">
-                {error}
-              </div>
-            ) : bookings.length === 0 ? (
-              <div className="p-6 bg-muted/10 rounded-lg">
-                <p className="text-muted-foreground">
-                  You have no bookings yet.
-                </p>
-              </div>
+            ) : filteredBookings.length === 0 ? (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="text-center py-20"
+              >
+                <Card className="border-2 border-dashed max-w-md mx-auto">
+                  <CardContent className="p-12">
+                    <div className="flex flex-col items-center gap-4">
+                      <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+                        <Calendar className="w-8 h-8 text-muted-foreground" />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-semibold mb-2">
+                          {bookings.length === 0 ? 'No bookings yet' : 'No bookings match this filter'}
+                        </h3>
+                        <p className="text-muted-foreground mb-4">
+                          {bookings.length === 0
+                            ? "Start exploring amazing experiences and book your first adventure!"
+                            : `Try selecting a different status filter.`}
+                        </p>
+                        {bookings.length === 0 && (
+                          <Button asChild variant="hero">
+                            <Link to="/experiences">
+                              Browse Experiences
+                            </Link>
+                          </Button>
+                        )}
+                        {bookings.length > 0 && (
+                          <Button variant="outline" onClick={() => setStatusFilter('all')}>
+                            Show All Bookings
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
             ) : (
-              <div className="grid gap-6">
-                {bookings.map(b => {
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={statusFilter}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="space-y-6"
+                >
+                  {filteredBookings.map((b, index) => {
                   const now = new Date();
                   const experienceDate = b.experienceDate ? new Date(b.experienceDate) : undefined;
                   const expiresAt = b.expiresAt ? new Date(b.expiresAt) : undefined;
@@ -215,180 +387,172 @@ const MyBookings = () => {
                   const title = typeof b.experience === 'object'
                     ? (b.experience?.title || 'Experience')
                     : (typeof b.tour === 'object' ? b.tour?.name : (b.tour as string)) || 'Experience';
-                  const qty = b.quantity || 1;
-                  const total = b.price || 0;
-                  const per = qty > 0 ? Math.round((total / qty) * 100) / 100 : total;
-                  
-                  // Extract guide information
-                  const guide = typeof b.guide === 'object' && b.guide !== null ? b.guide : null;
-                  const requiresGuide = b.requiresGuide === true;
-                  const guideCost = b.guideCost || 0;
-                  const experienceCost = total - guideCost;
-                  
-                  return (
-                    <Card
-                      key={b._id || b.id}
-                      className="border-0 shadow-sm rounded-lg overflow-hidden"
-                    >
-                      <CardContent className="p-4 md:p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-foreground text-lg">
-                            {title}
-                          </h3>
+                    const qty = b.quantity || 1;
+                    const total = b.price || 0;
+                    const per = qty > 0 ? Math.round((total / qty) * 100) / 100 : total;
+                    const experienceId = typeof b.experience === 'object' 
+                      ? ((b.experience as any)?._id ?? (b.experience as any)?.id)
+                      : b.experience;
+                    const experienceImage = typeof b.experience === 'object' 
+                      ? ((b.experience as any)?.imageCover as string)
+                      : null;
 
-                          <div className="mt-2 flex flex-col gap-2 text-sm text-muted-foreground">
-                            <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4">
-                              <span>
-                                Booked on{' '}
-                                {b.createdAt
-                                  ? new Date(b.createdAt).toLocaleString()
-                                  : 'Unknown'}
-                              </span>
-                              <span className="mt-1 sm:mt-0">
-                                Guests:{' '}
-                                <span className="text-foreground font-medium">{qty}</span>
-                              </span>
-                              <span className="mt-1 sm:mt-0">
-                                Per person:{' '}
-                                <span className="text-foreground font-medium">ETB {experienceCost > 0 ? Math.round((experienceCost / qty) * 100) / 100 : per}</span>
-                              </span>
-                            </div>
-                            <div className="grid gap-1 text-muted-foreground">
-                              <p>
-                                <span className="text-foreground font-medium">Experience:</span>{' '}
-                                {experienceInfo}
-                              </p>
-                              <p>
-                                <span className="text-foreground font-medium">Booking window:</span>{' '}
-                                {expirationInfo}
-                              </p>
-                            </div>
-                            
-                            {/* Guide Information */}
-                            {requiresGuide && guide && (
-                              <div className="mt-3 p-3 bg-primary/5 rounded-md border border-primary/20">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <UserCheck className="w-4 h-4 text-primary" />
-                                  <span className="text-foreground font-medium">Guide Assigned</span>
+                    return (
+                      <motion.div
+                        key={b._id || b.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.3, delay: index * 0.05 }}
+                      >
+                        <Card className="border-2 shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden">
+                          <CardContent className="p-0">
+                            <div className="flex flex-col md:flex-row">
+                              {/* Experience Image */}
+                              {experienceImage && (
+                                <div className="md:w-64 h-48 md:h-auto relative overflow-hidden">
+                                  <img
+                                    src={
+                                      String(experienceImage).startsWith('/')
+                                        ? `${API_ORIGIN}${experienceImage}`
+                                        : experienceImage
+                                    }
+                                    alt={title}
+                                    className="w-full h-full object-cover"
+                                  />
+                                  <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
                                 </div>
-                                <div className="flex items-start gap-3">
-                                  {guide.photo ? (
-                                    <Avatar className="w-10 h-10">
-                                      <AvatarImage
-                                        src={
-                                          String(guide.photo).startsWith('/')
-                                            ? `${API_ORIGIN}${guide.photo}`
-                                            : guide.photo
-                                        }
-                                        alt={guide.name || 'Guide'}
-                                      />
-                                      <AvatarFallback className="bg-primary/10 text-primary font-semibold text-xs">
-                                        {(() => {
-                                          const name = guide.name || 'Guide';
-                                          const parts = name.trim().split(/\s+/);
-                                          if (parts.length >= 2) {
-                                            return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-                                          }
-                                          return name.substring(0, 2).toUpperCase();
-                                        })()}
-                                      </AvatarFallback>
-                                    </Avatar>
-                                  ) : (
-                                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-xs">
-                                      {(() => {
-                                        const name = guide.name || 'Guide';
-                                        const parts = name.trim().split(/\s+/);
-                                        if (parts.length >= 2) {
-                                          return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-                                        }
-                                        return name.substring(0, 2).toUpperCase();
-                                      })()}
+                              )}
+                              
+                              {/* Booking Details */}
+                              <div className="flex-1 p-6">
+                                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                                  <div className="flex-1 space-y-4">
+                                    {/* Title and Link */}
+                                    <div>
+                                      <h3 className="font-display text-xl font-bold text-foreground mb-2 flex items-center gap-2">
+                                        {title}
+                                        {experienceId && (
+                                          <Button
+                                            asChild
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-6 px-2"
+                                          >
+                                            <Link to={`/experiences/${experienceId}`}>
+                                              <ExternalLink className="w-3 h-3" />
+                                            </Link>
+                                          </Button>
+                                        )}
+                                      </h3>
                                     </div>
-                                  )}
-                                  <div className="flex-1">
-                                    <div className="font-semibold text-sm text-foreground">{guide.name || 'Professional Guide'}</div>
-                                    {guide.email && (
-                                      <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                                        <Mail className="w-3 h-3" />
-                                        <a href={`mailto:${guide.email}`} className="hover:text-primary">
-                                          {guide.email}
-                                        </a>
+
+                                    {/* Booking Info Grid */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                      <div className="flex items-start gap-3">
+                                        <Calendar className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                                        <div>
+                                          <p className="text-sm font-medium text-foreground">Booked On</p>
+                                          <p className="text-sm text-muted-foreground">
+                                            {b.createdAt
+                                              ? new Date(b.createdAt).toLocaleDateString('en-US', {
+                                                  month: 'short',
+                                                  day: 'numeric',
+                                                  year: 'numeric',
+                                                  hour: '2-digit',
+                                                  minute: '2-digit'
+                                                })
+                                              : 'Unknown'}
+                                          </p>
+                                        </div>
                                       </div>
-                                    )}
-                                    {(() => {
-                                      const guidePhone = guide.phone || 
-                                                        guide.guideApplicationData?.phoneNumber || 
-                                                        null;
-                                      return guidePhone ? (
-                                        <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                                          <Phone className="w-3 h-3" />
-                                          <a href={`tel:${guidePhone}`} className="hover:text-primary">
-                                            {guidePhone}
-                                          </a>
+
+                                      <div className="flex items-start gap-3">
+                                        <Users className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                                        <div>
+                                          <p className="text-sm font-medium text-foreground">Guests</p>
+                                          <p className="text-sm text-muted-foreground">
+                                            {qty} {qty === 1 ? 'guest' : 'guests'} · ETB {per.toLocaleString()}/person
+                                          </p>
                                         </div>
-                                      ) : null;
-                                    })()}
-                                    {guideCost > 0 && (
-                                      <div className="mt-2 pt-2 border-t border-primary/10">
-                                        <div className="text-xs text-muted-foreground">
-                                          Guide Service: <span className="font-semibold text-foreground">ETB {guideCost.toFixed(2)}</span>
+                                      </div>
+
+                                      <div className="flex items-start gap-3">
+                                        <Clock className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                                        <div>
+                                          <p className="text-sm font-medium text-foreground">Experience Date</p>
+                                          <p className="text-sm text-muted-foreground">{experienceInfo}</p>
                                         </div>
+                                      </div>
+
+                                      <div className="flex items-start gap-3">
+                                        <Clock className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                                        <div>
+                                          <p className="text-sm font-medium text-foreground">Expires</p>
+                                          <p className="text-sm text-muted-foreground">{expirationInfo}</p>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* Helper Text */}
+                                    {statusMeta.helper && (
+                                      <div className="pt-2 border-t border-border">
+                                        <p className="text-xs text-muted-foreground italic">
+                                          {statusMeta.helper}
+                                        </p>
                                       </div>
                                     )}
                                   </div>
+
+                                  {/* Status and Price */}
+                                  <div className="flex flex-col gap-4 md:items-end">
+                                    <div className="flex flex-wrap gap-2 justify-end">
+                                      <Badge
+                                        className="text-sm font-medium"
+                                        style={{
+                                          backgroundColor: statusMeta.bg,
+                                          color: statusMeta.color
+                                        }}
+                                      >
+                                        {statusMeta.label}
+                                      </Badge>
+                                      <Badge
+                                        variant={b.paid ? 'default' : 'destructive'}
+                                        className="text-sm font-medium"
+                                      >
+                                        {b.paid ? (
+                                          <>
+                                            <CheckCircle className="w-3 h-3 mr-1" />
+                                            Paid
+                                          </>
+                                        ) : (
+                                          <>
+                                            <XCircle className="w-3 h-3 mr-1" />
+                                            Pending
+                                          </>
+                                        )}
+                                      </Badge>
+                                    </div>
+
+                                    <div className="bg-primary/10 rounded-lg p-4 border border-primary/20 min-w-[140px]">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <DollarSign className="w-4 h-4 text-primary" />
+                                        <span className="text-xs text-muted-foreground">Total Amount</span>
+                                      </div>
+                                      <div className="text-2xl font-bold text-primary">
+                                        ETB {total.toLocaleString()}
+                                      </div>
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
-                            )}
-                          </div>
-                          {statusMeta.helper && (
-                            <p className="mt-3 text-xs text-muted-foreground">
-                              {statusMeta.helper}
-                            </p>
-                          )}
-                        </div>
-
-                        <div className="flex flex-col gap-3 items-end mt-3 md:mt-0">
-                          <div className="flex flex-wrap gap-2 justify-end">
-                          <div
-                            className="px-3 py-1 rounded-full text-sm font-medium"
-                            style={{
-                              backgroundColor: statusMeta.bg,
-                              color: statusMeta.color
-                            }}
-                          >
-                            {statusMeta.label}
-                          </div>
-                            <div
-                              className="px-3 py-1 rounded-full text-sm font-medium"
-                              style={{
-                                backgroundColor: b.paid
-                                  ? 'rgba(16,185,129,0.12)'
-                                  : 'rgba(220,38,38,0.08)',
-                                color: b.paid ? '#10B981' : '#DC2626'
-                              }}
-                            >
-                              {b.paid ? 'Paid' : 'Payment pending'}
                             </div>
-                          </div>
-
-                          <div className="text-sm text-muted-foreground">
-                            {guideCost > 0 && (
-                              <div className="mb-2 text-right">
-                                <div className="text-xs">Experience: ETB {experienceCost.toFixed(2)}</div>
-                                <div className="text-xs">Guide: ETB {guideCost.toFixed(2)}</div>
-                              </div>
-                            )}
-                            <span className="block">Total</span>
-                            <span className="font-semibold text-foreground">
-                              ETB {total.toFixed(2)}
-                            </span>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
+                          </CardContent>
+                        </Card>
+                      </motion.div>
+                    );
+                  })}
+                </motion.div>
+              </AnimatePresence>
             )}
           </div>
         </section>

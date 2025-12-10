@@ -85,10 +85,40 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid
+      const requestUrl = error.config?.url || '';
+      const requestMethod = error.config?.method?.toLowerCase() || '';
+      
+      // Public GET routes that don't require authentication
+      // These should allow unauthenticated access
+      const publicGetRoutes = [
+        '/experiences/',  // GET /experiences/:id (public)
+        '/tours/',        // Alternative route (if exists)
+      ];
+      
+      // Check if this is a GET request to a public experience route
+      const isPublicExperienceGet = requestMethod === 'get' && 
+        publicGetRoutes.some(route => requestUrl.includes(route)) &&
+        !requestUrl.includes('/bookings') &&
+        !requestUrl.includes('/reviews') &&
+        !requestUrl.includes('/pending') &&
+        !requestUrl.includes('/top-5-cheap');
+      
+      // If it's a public GET request, don't redirect - just reject the error
+      // This allows unauthenticated users to view experience details
+      if (isPublicExperienceGet) {
+        // Don't redirect, just reject the promise
+        // The component will handle the error (might be a 404 or other error)
+        return Promise.reject(error);
+      }
+      
+      // For all other 401 errors (protected routes), redirect to login
+      // Only clear auth data and redirect if user was previously authenticated
+      const hadToken = localStorage.getItem("token");
+      if (hadToken) {
       localStorage.removeItem("token");
       localStorage.removeItem("user");
       window.location.href = "/login";
+      }
     }
     return Promise.reject(error);
   }
@@ -507,13 +537,10 @@ export const bookingsAPI = {
     // Placeholder - would need backend booking endpoints
     throw new Error("Booking functionality not yet implemented in backend");
   },
-  create: async (experienceId: string, qty?: number, requiresGuide?: boolean) => {
-    const params: { qty?: number; requiresGuide?: string } = {};
+  create: async (experienceId: string, qty?: number) => {
+    const params: { qty?: number } = {};
     if (qty != null && qty > 0) {
       params.qty = qty;
-    }
-    if (requiresGuide === true) {
-      params.requiresGuide = 'true';
     }
     const response = await api.get(`/bookings/checkout-session/${experienceId}`, { params });
     return response.data;
@@ -528,10 +555,6 @@ export const bookingsAPI = {
   },
   getHostBookings: async (): Promise<BookingListResponse> => {
     const response = await api.get("/bookings/host/bookings");
-    return response.data as BookingListResponse;
-  },
-  getGuideBookings: async (): Promise<BookingListResponse> => {
-    const response = await api.get("/bookings/guide/bookings");
     return response.data as BookingListResponse;
   },
   getAvailability: async (experienceId: string) => {
