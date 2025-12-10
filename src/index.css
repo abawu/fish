@@ -34,6 +34,12 @@ All colors MUST be HSL.
     /* Warm earth tones */
     --earth: 30 35% 45%;
     --earth-foreground: 0 0% 100%;
+    
+    /* Additional color utilities */
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
 
     --muted: 30 15% 95%;
     --muted-foreground: 30 8% 45%;
@@ -124,5 +130,24 @@ All colors MUST be HSL.
   
   .btn-glow {
     @apply shadow-[0_0_20px_hsl(var(--secondary)/0.3)] hover:shadow-[0_0_30px_hsl(var(--secondary)/0.5)];
+  }
+  
+  .bg-grid-pattern {
+    background-image: 
+      linear-gradient(to right, hsl(var(--primary)/0.03) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--primary)/0.03) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+  
+  .text-gradient-primary {
+    @apply bg-gradient-to-r from-primary to-primary-light bg-clip-text text-transparent;
+  }
+  
+  .text-gradient-secondary {
+    @apply bg-gradient-to-r from-secondary via-secondary to-accent bg-clip-text text-transparent;
+  }
+  
+  .border-gradient {
+    border-image: linear-gradient(to right, hsl(var(--primary)), hsl(var(--secondary))) 1;
   }
 }
