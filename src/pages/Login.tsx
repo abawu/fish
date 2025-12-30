@@ -10,6 +10,8 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { LogIn, Loader2, Mail, Lock, Eye, EyeOff, ArrowLeft, UserPlus } from 'lucide-react';
+import OAuthButton from '@/components/OAuthButton';
+import { useTranslation } from '@/hooks/useTranslation';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -20,9 +22,12 @@ const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
+  const { t } = useTranslation();
 
-  // Get the intended destination from location state, or default to home
-  const from = (location.state as any)?.from?.pathname || '/';
+  // Get the intended destination from location state, query params, or default to home
+  const searchParams = new URLSearchParams(location.search);
+  const redirectParam = searchParams.get('redirect');
+  const from = (location.state as any)?.from?.pathname || redirectParam || '/';
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -178,6 +183,22 @@ const Login = () => {
                 )}
               </Button>
             </form>
+            
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <Separator />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-card px-2 text-muted-foreground">
+                  {t("auth.orContinueWith")}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <OAuthButton provider="google" isLoading={isLoading} />
+              <OAuthButton provider="facebook" isLoading={isLoading} />
+            </div>
             
             <Separator />
             

@@ -3,6 +3,7 @@ import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import TourCard from "@/components/TourCard";
 import PageHeader from "@/components/PageHeader";
+import AISearchSuggestions from "@/components/AISearchSuggestions";
 import { Loader2, AlertCircle, ChevronLeft, ChevronRight, Search, X, Filter } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -11,8 +12,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { experiencesAPI } from "@/lib/api";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "@/hooks/useTranslation";
 
 const Tours = () => {
+  const { t } = useTranslation();
   const [sort, setSort] = useState<string>("");
   const [page, setPage] = useState<number>(1);
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -94,16 +97,16 @@ const Tours = () => {
     <div className="min-h-screen flex flex-col">
       <Navigation />
 
-      <main className="flex-1 pt-16">
+      <main className="flex-1 pt-24">
         {/* Header */}
         <PageHeader
           title={
             <>
-              Discover Authentic{" "}
-              <span className="text-primary">Home Experiences</span>
+              {t("tours.title")}{" "}
+              <span className="text-primary">{t("tours.titleHighlight")}</span>
             </>
           }
-          description="Browse our carefully curated collection of immersive experiences hosted by local families. From traditional coffee ceremonies to hands-on cooking workshops, discover authentic cultural connections."
+          description={t("tours.description")}
         />
 
         {/* Experiences Grid */}
@@ -111,7 +114,7 @@ const Tours = () => {
           <div className="container mx-auto px-4">
             {/* Search and Filters Bar */}
             <div className="mb-8 space-y-4">
-              {/* Search Bar */}
+              {/* Search Bar with AI Suggestions */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5" />
                 <Input
@@ -129,6 +132,10 @@ const Tours = () => {
                     <X className="w-5 h-5" />
                   </button>
                 )}
+                <AISearchSuggestions 
+                  searchQuery={searchQuery}
+                  onSuggestionClick={(suggestion) => setSearchQuery(suggestion)}
+                />
               </div>
 
               {/* Filters and Sort Row */}
@@ -136,7 +143,7 @@ const Tours = () => {
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                     <Filter className="w-4 h-4" />
-                    Filters:
+                    {t("tours.filters")}
                   </span>
                   {searchQuery && (
                     <Badge variant="secondary" className="gap-1">
@@ -163,18 +170,18 @@ const Tours = () => {
                 </div>
                 <div className="flex items-center gap-3">
                   <label htmlFor="sort" className="text-sm text-muted-foreground whitespace-nowrap">
-                    Sort by:
+                    {t("tours.sortBy")}
                   </label>
                   <Select value={sort || "default"} onValueChange={(value) => setSort(value === "default" ? "" : value)}>
                     <SelectTrigger id="sort" className="w-[180px]">
-                      <SelectValue placeholder="Default" />
+                      <SelectValue placeholder={t("tours.default")} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="default">Default</SelectItem>
-                      <SelectItem value="-ratingsAverage,price">Top Rated</SelectItem>
-                      <SelectItem value="price">Price: Low to High</SelectItem>
-                      <SelectItem value="-price">Price: High to Low</SelectItem>
-                      <SelectItem value="-createdAt">Newest First</SelectItem>
+                      <SelectItem value="default">{t("tours.default")}</SelectItem>
+                      <SelectItem value="-ratingsAverage,price">{t("tours.topRated")}</SelectItem>
+                      <SelectItem value="price">{t("tours.priceLowHigh")}</SelectItem>
+                      <SelectItem value="-price">{t("tours.priceHighLow")}</SelectItem>
+                      <SelectItem value="-createdAt">{t("tours.newest")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -183,14 +190,13 @@ const Tours = () => {
               {/* Results Count */}
               <div className="flex items-center justify-between">
                 <p className="text-sm text-muted-foreground">
-                  Showing{" "}
+                  {t("tours.showing")}{" "}
                   <span className="font-semibold text-foreground">
                     {filteredExperiences.length}
                   </span>{" "}
-                  experience
-                  {filteredExperiences.length !== 1 ? "s" : ""}
+                  {filteredExperiences.length !== 1 ? t("tours.experiencesPlural") : t("tours.experiences")}
                   {totalPages > 1 && (
-                    <>{" "}on page <span className="font-semibold text-foreground">{page}</span> of {totalPages}</>
+                    <>{" "}{t("tours.onPage")} <span className="font-semibold text-foreground">{page}</span> {t("tours.of")} {totalPages}</>
                   )}
                 </p>
               </div>
@@ -254,11 +260,11 @@ const Tours = () => {
                               <Search className="w-8 h-8 text-muted-foreground" />
                             </div>
                             <div>
-                              <h3 className="text-xl font-semibold mb-2">No experiences found</h3>
+                              <h3 className="text-xl font-semibold mb-2">{t("tours.noResults")}</h3>
                               <p className="text-muted-foreground mb-4">
                                 {searchQuery
-                                  ? `We couldn't find any experiences matching "${searchQuery}". Try adjusting your search.`
-                                  : "No experiences are available at the moment. Check back later!"}
+                                  ? t("tours.noResultsDescription")
+                                  : t("tours.noResultsDescription")}
                               </p>
                               {searchQuery && (
                                 <Button
@@ -267,7 +273,7 @@ const Tours = () => {
                                   className="gap-2"
                                 >
                                   <X className="w-4 h-4" />
-                                  Clear search
+                                  {t("tours.clearSearch")}
                                 </Button>
                               )}
                             </div>
@@ -282,7 +288,7 @@ const Tours = () => {
                 {filteredExperiences.length > 0 && totalPages > 1 && (
                   <div className="mt-12 flex flex-col sm:flex-row items-center justify-between gap-4">
                     <p className="text-sm text-muted-foreground">
-                      Page {page} of {totalPages}
+                      {t("common.view")} {page} {t("tours.of")} {totalPages}
                     </p>
                     <div className="flex items-center gap-2">
                       <Button
@@ -293,7 +299,7 @@ const Tours = () => {
                         className="gap-1"
                       >
                         <ChevronLeft className="w-4 h-4" />
-                        Previous
+                        {t("tours.previous")}
                       </Button>
                       <div className="flex items-center gap-1">
                         {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
@@ -328,7 +334,7 @@ const Tours = () => {
                         disabled={page >= totalPages || isLoading}
                         className="gap-1"
                       >
-                        Next
+                        {t("tours.next")}
                         <ChevronRight className="w-4 h-4" />
                       </Button>
                     </div>

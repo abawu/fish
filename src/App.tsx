@@ -4,7 +4,11 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { AIProvider } from "@/contexts/AIContext";
+import { LanguageProvider } from "@/contexts/LanguageContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import AIChat from "@/components/AIChat";
+import LanguageSelector from "@/components/LanguageSelector";
 import Home from "./pages/Home";
 import Tours from "./pages/Tours";
 import TourDetail from "./pages/TourDetail";
@@ -33,179 +37,189 @@ import NotFound from "./pages/NotFound";
 import Wallet from "./pages/Wallet";
 import MyWithdrawals from "./pages/MyWithdrawals";
 import AdminPayouts from "./pages/AdminPayouts";
+import HostProfile from "./pages/HostProfile";
+import OAuthCallback from "./pages/OAuthCallback";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <AuthProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/experiences" element={<Tours />} />
-            <Route path="/experiences/:id" element={<TourDetail />} />
-            <Route path="/tours" element={<Tours />} />
-            <Route path="/tours/:id" element={<TourDetail />} />
-            <Route path="/about" element={<About />} />
-            <Route path="/contact" element={<Contact />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
-            <Route path="/verify-email/:token" element={<VerifyEmail />} />
-            <Route path="/forgot-password" element={<ForgotPassword />} />
-            <Route path="/reset-password/:token" element={<ResetPassword />} />
-            <Route
-              path="/profile"
-              element={
-                <ProtectedRoute>
-                  <Profile />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/update-password"
-              element={
-                <ProtectedRoute>
-                  <UpdatePassword />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/host/wallet"
-              element={
-                <ProtectedRoute>
-                  <Wallet />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/host/withdrawals"
-              element={
-                <ProtectedRoute>
-                  <MyWithdrawals />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/dashboard"
-              element={
-                <ProtectedRoute>
-                  <AdminDashboard />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/experiences"
-              element={
-                <ProtectedRoute>
-                  <TourManagement />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/tours"
-              element={
-                <ProtectedRoute>
-                  <TourManagement />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/users"
-              element={
-                <ProtectedRoute>
-                  <UserManagement />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/host-applications"
-              element={
-                <ProtectedRoute>
-                  <ManageHostApplications />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/hosts"
-              element={
-                <ProtectedRoute>
-                  <HostManagement />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/payouts"
-              element={
-                <ProtectedRoute>
-                  <AdminPayouts />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/my-bookings"
-              element={
-                <ProtectedRoute>
-                  <MyBookings />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/my-reviews"
-              element={
-                <ProtectedRoute>
-                  <MyReviews />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/host-application"
-              element={
-                <ProtectedRoute>
-                  <HostApplication />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/guide-application"
-              element={
-                <ProtectedRoute>
-                  <GuideApplication />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/guide-applications"
-              element={
-                <ProtectedRoute>
-                  <ManageGuideApplications />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/guide-management"
-              element={
-                <ProtectedRoute>
-                  <GuideManagement />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/guide/dashboard"
-              element={
-                <ProtectedRoute>
-                  <GuideDashboard />
-                </ProtectedRoute>
-              }
-            />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
-    </AuthProvider>
+    <LanguageProvider>
+      <AuthProvider>
+        <AIProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/experiences" element={<Tours />} />
+              <Route path="/experiences/:id" element={<TourDetail />} />
+              <Route path="/tours" element={<Tours />} />
+              <Route path="/tours/:id" element={<TourDetail />} />
+              <Route path="/hosts/:id" element={<HostProfile />} />
+              <Route path="/about" element={<About />} />
+              <Route path="/contact" element={<Contact />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<Signup />} />
+              <Route path="/auth/callback" element={<OAuthCallback />} />
+              <Route path="/verify-email/:token" element={<VerifyEmail />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/reset-password/:token" element={<ResetPassword />} />
+              <Route
+                path="/profile"
+                element={
+                  <ProtectedRoute>
+                    <Profile />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/update-password"
+                element={
+                  <ProtectedRoute>
+                    <UpdatePassword />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/host/wallet"
+                element={
+                  <ProtectedRoute>
+                    <Wallet />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/host/withdrawals"
+                element={
+                  <ProtectedRoute>
+                    <MyWithdrawals />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/dashboard"
+                element={
+                  <ProtectedRoute>
+                    <AdminDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/experiences"
+                element={
+                  <ProtectedRoute>
+                    <TourManagement />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/tours"
+                element={
+                  <ProtectedRoute>
+                    <TourManagement />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/users"
+                element={
+                  <ProtectedRoute>
+                    <UserManagement />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/host-applications"
+                element={
+                  <ProtectedRoute>
+                    <ManageHostApplications />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/hosts"
+                element={
+                  <ProtectedRoute>
+                    <HostManagement />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/payouts"
+                element={
+                  <ProtectedRoute>
+                    <AdminPayouts />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/my-bookings"
+                element={
+                  <ProtectedRoute>
+                    <MyBookings />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/my-reviews"
+                element={
+                  <ProtectedRoute>
+                    <MyReviews />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/host-application"
+                element={
+                  <ProtectedRoute>
+                    <HostApplication />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/guide-application"
+                element={
+                  <ProtectedRoute>
+                    <GuideApplication />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/guide-applications"
+                element={
+                  <ProtectedRoute>
+                    <ManageGuideApplications />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/guide-management"
+                element={
+                  <ProtectedRoute>
+                    <GuideManagement />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/guide/dashboard"
+                element={
+                  <ProtectedRoute>
+                    <GuideDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="*" element={<NotFound />} />
+              </Routes>
+              {/* AI Chat Widget - Available on all pages */}
+              <AIChat />
+            </BrowserRouter>
+          </TooltipProvider>
+        </AIProvider>
+      </AuthProvider>
+    </LanguageProvider>
   </QueryClientProvider>
 );
 

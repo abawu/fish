@@ -1,93 +1,75 @@
 import { Button } from "@/components/ui/button";
-import { ArrowRight, MapPin } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 
-const Hero = () => {
+interface HeroProps {
+  className?: string;
+}
+
+const Hero = ({ className = "" }: HeroProps) => {
   return (
-    <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
-      {/* Background Image with Overlay */}
+    <section className={`relative min-h-screen flex items-center justify-center overflow-hidden ${className}`}>
+      {/* Background Image */}
       <div className="absolute inset-0 z-0">
         <img 
           src="/hero.jpg" 
-          alt="Ethiopian Cultural Experience" 
+          alt="Ethiopian cultural experience in a local home" 
           className="w-full h-full object-cover"
           onError={(e) => {
-            // Fallback to other common hero image names
             const target = e.target as HTMLImageElement;
             if (target.src.includes('hero.jpg')) {
-              target.src = '/hero-image.jpg';
-            } else if (target.src.includes('hero-image.jpg')) {
-              target.src = '/hero-section.jpg';
+              target.src = '/localhome.jpg';
+            } else if (target.src.includes('localhome.jpg')) {
+              target.src = '/collage1.jpg';
             } else {
-              target.src = '/coffee-ceremony.jpg';
+              target.src = '/placeholder.svg';
             }
           }}
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-primary/60 via-primary/40 to-background/90" />
-        
-        {/* Ethiopian Pattern Overlay */}
-        <div className="absolute inset-0 pattern-ethiopian" />
+        {/* Subtle dark overlay for text readability */}
+        <div className="absolute inset-0 bg-black/40" />
       </div>
 
-      {/* Content */}
-      <div className="relative z-10 container mx-auto px-4 py-32 text-center">
-        <div className="max-w-4xl mx-auto">
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            className="inline-flex items-center gap-2 bg-secondary/20 backdrop-blur-sm px-3 py-1.5 md:px-4 md:py-2 rounded-full mb-4 md:mb-6 border border-secondary/30"
-          >
-            <MapPin className="w-3 h-3 md:w-4 md:h-4 text-secondary" />
-            <span className="text-primary-foreground font-medium text-xs md:text-sm">Discover Authentic Home Experiences</span>
-          </motion.div>
-          
-          <motion.h1 
+      {/* Text Content - Overlaying Hero Image */}
+      <div className="relative z-10 container mx-auto px-4 lg:px-6 pt-24 md:pt-32 pb-20 md:pb-32">
+        <div className="max-w-4xl mx-auto text-center flex flex-col items-center justify-center">
+          <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2, duration: 0.8 }}
-            className="font-display text-2xl md:text-5xl lg:text-6xl font-bold text-primary-foreground mb-4 md:mb-6 leading-tight"
+            transition={{ duration: 0.8, ease: "easeOut" }}
+            className="w-full flex flex-col items-center"
           >
-            Authentic Experiences
-            <span className="block text-secondary">In Local Homes</span>
-          </motion.h1>
-          
-          <motion.p 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4, duration: 0.8 }}
-            className="text-sm md:text-lg lg:text-xl text-primary-foreground/90 mb-6 md:mb-10 max-w-2xl mx-auto leading-relaxed px-2"
-          >
-            Join local hosts in their homes for immersive cultural experiences. From traditional coffee ceremonies 
-            to hands-on cooking workshops, discover authentic connections through meaningful interactions.
-          </motion.p>
-
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6, duration: 0.8 }}
-            className="flex flex-col sm:flex-row gap-4 justify-center items-center"
-          >
-            <Button asChild variant="hero" className="group h-11 md:h-14 px-6 md:px-10 text-sm md:text-base">
-              <Link to="/tours">
-                Discover Experiences
-                <ArrowRight className="w-4 h-4 md:w-5 md:h-5 group-hover:translate-x-1 transition-transform" />
-              </Link>
-            </Button>
-            <Button asChild variant="outline" className="bg-background/10 backdrop-blur-sm text-primary-foreground border-primary-foreground/30 hover:bg-background/20 h-11 md:h-14 px-6 md:px-10 text-sm md:text-base">
-              <Link to="/about">
-                Learn More
-              </Link>
-            </Button>
+            {/* Primary Headline - Highly Centered */}
+            <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl font-semibold text-white mb-6 leading-[1.15] tracking-tight drop-shadow-lg text-center mx-auto" style={{ textAlign: 'center' }}>
+              Join local hosts in their homes for immersive cultural experiences
+            </h1>
+            
+            {/* Supporting Description */}
+            <p className="text-lg md:text-xl text-white/95 mb-8 leading-relaxed max-w-2xl mx-auto drop-shadow-md" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
+              From traditional coffee ceremonies to hands-on cooking workshops, discover authentic connections through meaningful interactions.
+            </p>
+            
+            {/* Primary CTA */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2, duration: 0.6 }}
+              className="flex justify-center"
+            >
+              <Button 
+                asChild 
+                variant="default" 
+                size="lg"
+                className="bg-white text-neutral-900 hover:bg-neutral-50 rounded-none px-8 py-6 text-base font-medium tracking-wide transition-colors shadow-lg"
+              >
+                <Link to="/tours">
+                  Explore Experiences
+                  <ArrowRight className="w-5 h-5 ml-2" />
+                </Link>
+              </Button>
+            </motion.div>
           </motion.div>
-        </div>
-
-        {/* Scroll Indicator */}
-        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 animate-float">
-          <div className="w-6 h-10 border-2 border-secondary/50 rounded-full flex items-start justify-center p-2">
-            <div className="w-1.5 h-1.5 bg-secondary rounded-full animate-pulse" />
-          </div>
         </div>
       </div>
     </section>

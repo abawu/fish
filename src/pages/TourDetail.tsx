@@ -40,6 +40,7 @@ const TourDetail = () => {
   const { id } = useParams();
   const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [experience, setExperience] = useState<any | null>(null);
   const [selectedStartDate, setSelectedStartDate] = useState<string | null>(
     null
@@ -833,9 +834,17 @@ const TourDetail = () => {
                                   )}
                                   <div className="flex-1">
                                     <div className="font-semibold text-base mb-1">{experience.host.name}</div>
-                                    <div className="text-sm text-muted-foreground">
+                                    <div className="text-sm text-muted-foreground mb-2">
                                       {experience.host.email}
                                     </div>
+                                    {experience.host._id || experience.host.id ? (
+                                      <Link
+                                        to={`/hosts/${experience.host._id || experience.host.id}`}
+                                        className="text-sm text-primary hover:underline font-medium"
+                                      >
+                                        {t("hostProfile.viewProfile")} →
+                                      </Link>
+                                    ) : null}
                                   </div>
                                 </>
                               ) : null}

@@ -2,6 +2,70 @@
 @tailwind components;
 @tailwind utilities;
 
+/* RTL Support */
+[dir="rtl"] {
+  direction: rtl;
+}
+
+[dir="ltr"] {
+  direction: ltr;
+}
+
+/* Text handling for longer languages (Amharic, Arabic) */
+body {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Ensure proper text alignment based on direction */
+[dir="rtl"] .text-left {
+  text-align: right;
+}
+
+[dir="ltr"] .text-right {
+  text-align: left;
+}
+
+/* Flex direction adjustments for RTL */
+[dir="rtl"] .flex-row {
+  flex-direction: row-reverse;
+}
+
+/* Margin/padding adjustments for RTL */
+[dir="rtl"] .ml-auto {
+  margin-left: 0;
+  margin-right: auto;
+}
+
+[dir="rtl"] .mr-auto {
+  margin-right: 0;
+  margin-left: auto;
+}
+
+/* RTL Support */
+[dir="rtl"] {
+  direction: rtl;
+}
+
+[dir="ltr"] {
+  direction: ltr;
+}
+
+/* Text handling for longer languages */
+[dir="rtl"] * {
+  text-align: right;
+}
+
+[dir="ltr"] * {
+  text-align: left;
+}
+
+/* Ensure proper text wrapping for Amharic and Arabic */
+body {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
 /* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
 All colors MUST be HSL.
 */
@@ -10,7 +74,7 @@ All colors MUST be HSL.
   :root {
     /* Ethiopian-inspired color palette */
     --background: 0 0% 100%;
-    --foreground: 30 8% 20%;
+    --foreground: 0 0% 15%;
 
     --card: 0 0% 100%;
     --card-foreground: 30 8% 20%;
@@ -18,13 +82,13 @@ All colors MUST be HSL.
     --popover: 0 0% 100%;
     --popover-foreground: 30 8% 20%;
 
-    /* Deep emerald green - Ethiopian highlands */
-    --primary: 152 65% 28%;
+    /* Premium dark green - matching reference */
+    --primary: 142 50% 25%;
     --primary-foreground: 0 0% 100%;
-    --primary-light: 152 55% 45%;
+    --primary-light: 142 45% 35%;
     
-    /* Rich gold - Ethiopian tradition */
-    --secondary: 45 95% 50%;
+    /* Premium accent - warm gold */
+    --secondary: 45 85% 48%;
     --secondary-foreground: 30 8% 20%;
     
     /* Vibrant red - Ethiopian heritage */
@@ -41,14 +105,14 @@ All colors MUST be HSL.
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
 
-    --muted: 30 15% 95%;
-    --muted-foreground: 30 8% 45%;
+    --muted: 0 0% 98%;
+    --muted-foreground: 0 0% 45%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 30 15% 88%;
-    --input: 30 15% 88%;
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
     --ring: 152 65% 28%;
 
     --radius: 0.75rem;
@@ -108,10 +172,36 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "kern" 1, "liga" 1;
   }
   
   h1, h2, h3, h4, h5, h6 {
-    @apply font-bold tracking-tight;
+    @apply font-serif font-bold tracking-tight;
+    letter-spacing: -0.02em;
+  }
+
+  h1 {
+    @apply text-5xl md:text-6xl lg:text-7xl xl:text-8xl;
+  }
+
+  h2 {
+    @apply text-4xl md:text-5xl lg:text-6xl;
+  }
+
+  h3 {
+    @apply text-3xl md:text-4xl lg:text-5xl;
+  }
+
+  h4 {
+    @apply text-2xl md:text-3xl;
+  }
+
+  h5 {
+    @apply text-xl md:text-2xl;
+  }
+
+  h6 {
+    @apply text-lg md:text-xl;
   }
 }
 

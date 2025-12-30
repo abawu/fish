@@ -5,7 +5,7 @@ import {
   useEffect,
   ReactNode,
 } from "react";
-import { authAPI } from "@/lib/api";
+import { authAPI, usersAPI } from "@/lib/api";
 
 interface User {
   id: string;
@@ -24,6 +24,7 @@ interface AuthContextType {
     password: string,
     passwordConfirm: string
   ) => Promise<void>;
+  loginWithOAuth: (token: string) => Promise<void>;
   updateUser: (newUser: User) => void;
   logout: () => void;
   isAuthenticated: boolean;
@@ -89,6 +90,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const loginWithOAuth = async (token: string) => {
+    try {
+      const { token: authToken, user: authUser } = await authAPI.handleOAuthCallback(token);
+      setToken(authToken);
+      if (authUser) {
+        setUser(authUser);
+      } else {
+        // If user not returned, fetch it
+        const response = await usersAPI.getMe();
+        const userData = response.data?.data?.data || response.data?.data || response.data;
+        setUser(userData);
+        localStorage.setItem("user", JSON.stringify(userData));
+      }
+    } catch (error: any) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      throw error;
+    }
+  };
+
   const updateUser = (newUser: User) => {
     setUser(newUser);
     try {
@@ -111,6 +132,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         token,
         login,
         signup,
+        loginWithOAuth,
         updateUser,
         logout,
         isAuthenticated: !!token,

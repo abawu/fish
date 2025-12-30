@@ -88,8 +88,9 @@ export default function HostApplication() {
   const [applicationStatus, setApplicationStatus] = useState<string | null>(null);
 
   useEffect(() => {
+    // Redirect to login if not authenticated, but allow them to come back
     if (!isAuthenticated) {
-      navigate("/login");
+      navigate("/login?redirect=/host-application");
       return;
     }
 

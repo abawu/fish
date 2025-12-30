@@ -16,6 +16,8 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { UserPlus, Loader2, Mail, Lock, User, CheckCircle, Eye, EyeOff, ArrowLeft } from "lucide-react";
+import OAuthButton from '@/components/OAuthButton';
+import { useTranslation } from '@/hooks/useTranslation';
 
 const Signup = () => {
   const [name, setName] = useState("");
@@ -28,6 +30,7 @@ const Signup = () => {
   const { signup, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { t } = useTranslation();
 
   const passwordStrength = password.length >= 8 ? "strong" : password.length >= 4 ? "medium" : "weak";
   const passwordsMatch = password && passwordConfirm && password === passwordConfirm;
@@ -288,6 +291,22 @@ const Signup = () => {
                 )}
               </Button>
             </form>
+            
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <Separator />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-card px-2 text-muted-foreground">
+                  {t("auth.orContinueWith")}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <OAuthButton provider="google" isLoading={isLoading} />
+              <OAuthButton provider="facebook" isLoading={isLoading} />
+            </div>
             
             <Separator />
             

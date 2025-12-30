@@ -152,6 +152,31 @@ export const authAPI = {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
   },
+  // OAuth - Redirect to backend OAuth endpoints
+  googleOAuth: () => {
+    const callbackUrl = `${window.location.origin}/auth/callback`;
+    const redirectUrl = `${API_BASE_URL.replace('/api/v1', '')}/api/v1/users/auth/google`;
+    window.location.href = `${redirectUrl}?redirect=${encodeURIComponent(callbackUrl)}`;
+  },
+  facebookOAuth: () => {
+    const callbackUrl = `${window.location.origin}/auth/callback`;
+    const redirectUrl = `${API_BASE_URL.replace('/api/v1', '')}/api/v1/users/auth/facebook`;
+    window.location.href = `${redirectUrl}?redirect=${encodeURIComponent(callbackUrl)}`;
+  },
+  // Handle OAuth callback - called after OAuth redirect
+  handleOAuthCallback: async (token: string) => {
+    // Store token and fetch user data
+    localStorage.setItem("token", token);
+    try {
+      const response = await api.get("/users/me");
+      const user = response.data.data.data || response.data.data || response.data;
+      localStorage.setItem("user", JSON.stringify(user));
+      return { token, user };
+    } catch (error: any) {
+      // If fetching user fails, still return token (user might be in token)
+      return { token, user: null };
+    }
+  },
 };
 
 // Experiences API
@@ -457,6 +482,10 @@ export const usersAPI = {
     const response = await api.patch(`/users/reject-host/${id}`);
     return response.data;
   },
+  getHostById: async (id: string) => {
+    const response = await api.get(`/users/${id}`);
+    return response.data;
+  },
 };
 
 // Reviews API
@@ -560,6 +589,177 @@ export const bookingsAPI = {
   getAvailability: async (experienceId: string) => {
     const response = await api.get(`/bookings/availability/${experienceId}`);
     return response.data;
+  },
+};
+
+// AI Chat API
+export const aiChatAPI = {
+  sendMessage: async (payload: {
+    message: string;
+    userId?: string;
+    context?: {
+      isAuthenticated?: boolean;
+      userRole?: string;
+      previousMessages?: Array<{ role: string; content: string }>;
+    };
+  }) => {
+    const message = payload.message.toLowerCase();
+    let response: any = {
+      data: {
+        message: "",
+        suggestions: [],
+        recommendations: [],
+      },
+    };
+
+    try {
+      // Try to fetch real experiences based on the message
+      let shouldFetchExperiences = false;
+      let fetchParams: Record<string, any> = { limit: 3 };
+
+      if (message.includes("coffee") || message.includes("ceremony")) {
+        response.data.message = "I'd love to help you find coffee ceremony experiences! Ethiopian coffee ceremonies are a beautiful tradition. Here are some options:";
+        fetchParams.search = "coffee";
+        shouldFetchExperiences = true;
+        response.data.suggestions = [
+          "Show me all coffee experiences",
+          "What's the price range?",
+          "Tell me more about the ceremony"
+        ];
+      } else if (message.includes("cheap") || message.includes("budget") || message.includes("under")) {
+        response.data.message = "Great! I can help you find affordable experiences. Here are some budget-friendly options:";
+        fetchParams.sort = "price";
+        fetchParams.limit = 5;
+        shouldFetchExperiences = true;
+        response.data.suggestions = [
+          "Experiences under $30",
+          "Experiences under $50",
+          "Show me the cheapest options"
+        ];
+      } else if (message.includes("popular") || message.includes("trending") || message.includes("best") || message.includes("top")) {
+        response.data.message = "Here are some of our most popular and highly-rated experiences that guests love!";
+        fetchParams.sort = "-ratingsAverage,price";
+        shouldFetchExperiences = true;
+        response.data.suggestions = [
+          "Show top rated experiences",
+          "What's trending this week?",
+          "Show me experiences with great reviews"
+        ];
+      } else if (message.includes("cooking") || message.includes("food") || message.includes("recipe")) {
+        response.data.message = "Ethiopian cuisine is amazing! Here are some cooking and food experiences:";
+        fetchParams.search = "cooking food recipe";
+        shouldFetchExperiences = true;
+        response.data.suggestions = [
+          "Tell me about Ethiopian food",
+          "Show me cooking experiences",
+          "What dishes can I learn?"
+        ];
+      } else if (message.includes("culture") || message.includes("ethiopian") || message.includes("tradition")) {
+        response.data.message = "Ethiopian culture is rich and diverse! Here are some cultural experiences:";
+        fetchParams.sort = "-ratingsAverage";
+        shouldFetchExperiences = true;
+        response.data.suggestions = [
+          "Tell me about Ethiopian food",
+          "Show me cultural experiences",
+          "What makes these experiences authentic?"
+        ];
+      } else if (message.includes("location") || message.includes("where") || message.includes("place") || message.includes("addis")) {
+        response.data.message = "Our experiences are hosted in local homes across Ethiopia, primarily in Addis Ababa and surrounding areas. Here are some options:";
+        fetchParams.search = "addis ababa";
+        shouldFetchExperiences = true;
+        response.data.suggestions = [
+          "Show experiences in Addis Ababa",
+          "What locations are available?",
+          "How do I get there?"
+        ];
+      } else if (message.includes("show") || message.includes("find") || message.includes("search") || message.includes("experiences")) {
+        response.data.message = "Let me help you discover amazing experiences! Here are some options:";
+        fetchParams.sort = "-ratingsAverage,price";
+        shouldFetchExperiences = true;
+        response.data.suggestions = [
+          "Show me all experiences",
+          "What's popular?",
+          "Find budget-friendly options"
+        ];
+      } else {
+        response.data.message = "I'm here to help you discover amazing Ethiopian cultural experiences! I can help you find experiences by type, price, location, or answer questions about our platform. What would you like to explore?";
+        response.data.suggestions = [
+          "Show me all experiences",
+          "What's popular?",
+          "Find budget-friendly options",
+          "Tell me about Ethiopian culture"
+        ];
+      }
+
+      // Fetch real experiences if needed
+      if (shouldFetchExperiences) {
+        try {
+          const experiencesResponse = await experiencesAPI.getAll(fetchParams);
+          const experiences = experiencesResponse.data?.data || experiencesResponse.data || [];
+          
+          if (experiences.length > 0) {
+            response.data.recommendations = experiences.slice(0, 3).map((exp: any) => ({
+              id: exp._id || exp.id,
+              title: exp.title,
+              location: exp.location || "Ethiopia",
+              price: exp.price || 0,
+              image: exp.imageCover,
+            }));
+          }
+        } catch (error) {
+          console.error("Failed to fetch experiences for AI chat:", error);
+          // Continue without recommendations
+        }
+      }
+
+      return response;
+    } catch (error: any) {
+      console.error("AI Chat error:", error);
+      return {
+        data: {
+          message: "I apologize, but I'm having trouble processing your request right now. Please try again in a moment, or feel free to browse our experiences directly.",
+          suggestions: [
+            "Browse all experiences",
+            "Contact support",
+            "Try asking again"
+          ],
+          recommendations: [],
+        },
+      };
+    }
+  },
+  
+  getRecommendations: async (userId?: string, preferences?: any) => {
+    try {
+      const params: Record<string, any> = { limit: 6 };
+      
+      if (preferences?.budgetRange) {
+        params["price[gte]"] = preferences.budgetRange.min;
+        params["price[lte]"] = preferences.budgetRange.max;
+      }
+      
+      if (preferences?.location) {
+        params.search = preferences.location;
+      }
+      
+      if (preferences?.interests?.length > 0) {
+        params.search = preferences.interests.join(" ");
+      }
+      
+      const response = await experiencesAPI.getAll(params);
+      return {
+        data: {
+          recommendations: response.data?.data || response.data || [],
+        },
+      };
+    } catch (error) {
+      console.error("Failed to get AI recommendations:", error);
+      return {
+        data: {
+          recommendations: [],
+        },
+      };
+    }
   },
 };
 

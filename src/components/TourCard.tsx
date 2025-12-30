@@ -46,9 +46,9 @@ const TourCard = ({ tour }: TourCardProps) => {
       transition={{ duration: 0.5 }}
     >
       <Link to={`/experiences/${tour._id ?? tour.id}`}>
-        <Card className="group overflow-hidden cursor-pointer hover-lift shadow-sm hover:shadow-md transition-all duration-300 border border-border/50 hover:border-primary/30">
+        <Card className="group overflow-hidden cursor-pointer hover-lift shadow-sm hover:shadow-lg transition-all duration-300 border border-border/50 hover:border-primary/30 bg-white">
           {/* Experience Image */}
-          <div className="relative h-48 overflow-hidden rounded-t-lg">
+          <div className="relative h-48 overflow-hidden">
             <img
               src={
                 tour.imageCover && String(tour.imageCover).startsWith("/")
